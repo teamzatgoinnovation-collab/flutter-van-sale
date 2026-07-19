@@ -243,7 +243,7 @@ packages:
   zatgo_dart_sdk:
     dependency: "direct main"
     description:
-      path: "../../SharedSDK/dart_sdk"
+      path: "../../../SharedSDK/dart_sdk"
       relative: true
     source: path
     version: "0.1.0"
