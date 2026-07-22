@@ -182,7 +182,7 @@ class SyncService extends ChangeNotifier {
       }
 
       if (pullTrips) {
-        progressLabel = 'Pulling ERP catalog…';
+        progressLabel = 'Pulling catalog…';
         notifyListeners();
         await repo.refreshFromErpnext(session);
         await products.refreshFromErp(session);
@@ -371,7 +371,7 @@ class SyncService extends ChangeNotifier {
       }
       final erpName = _extractErpName(item, env.data);
       if (erpName == null || erpName.isEmpty) {
-        throw StateError('ERP ack missing name for ${item.method}');
+        throw StateError('Server ack missing name for ${item.method}');
       }
       String? modified;
       if (env.data is Map) {

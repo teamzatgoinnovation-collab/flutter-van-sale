@@ -42,18 +42,15 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
       _query.text = widget.initialQuery!;
       _controller.query = widget.initialQuery!;
     }
-    _controller.runSearch = ({
-      required String query,
-      required int limit,
-      required int offset,
-    }) {
-      return customerRepository.search(
-        query: query,
-        limit: limit,
-        offset: offset,
-        scope: _scope,
-      );
-    };
+    _controller.runSearch =
+        ({required String query, required int limit, required int offset}) {
+          return customerRepository.search(
+            query: query,
+            limit: limit,
+            offset: offset,
+            scope: _scope,
+          );
+        };
     _controller.addListener(_onController);
     _scroll.addListener(_onScroll);
     _controller.reload(reset: true);
@@ -87,9 +84,7 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Scan or type barcode',
-          ),
+          decoration: const InputDecoration(hintText: 'Scan or type barcode'),
           onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
         ),
         actions: [
@@ -144,15 +139,14 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
   Future<void> _createCustomer() async {
     final sync = widget.sync;
     if (sync == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sync service unavailable')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Sync service unavailable')));
       return;
     }
     final created = await Navigator.of(context).push<CustomerModel>(
       MaterialPageRoute(
-        builder: (_) =>
-            CustomerFormPage(session: widget.session, sync: sync),
+        builder: (_) => CustomerFormPage(session: widget.session, sync: sync),
       ),
     );
     if (created == null || !mounted) return;
@@ -258,103 +252,103 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
               child: c.loading && !c.refreshing
                   ? const Center(child: CircularProgressIndicator())
                   : c.items.isEmpty
-                      ? ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          children: [
-                            const SizedBox(height: 80),
-                            Icon(
-                              Icons.person_search_outlined,
-                              size: 48,
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        const SizedBox(height: 80),
+                        Icon(
+                          Icons.person_search_outlined,
+                          size: 48,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(height: 12),
+                        Center(
+                          child: Text(
+                            _scope == CustomerSearchScope.favorites
+                                ? 'No favorites yet'
+                                : _scope == CustomerSearchScope.recent
+                                ? 'No recent customers'
+                                : 'No customers match',
+                            style: theme.textTheme.titleMedium,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: Text(
+                            'Pull to refresh · works offline',
+                            style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
-                            const SizedBox(height: 12),
-                            Center(
-                              child: Text(
-                                _scope == CustomerSearchScope.favorites
-                                    ? 'No favorites yet'
-                                    : _scope == CustomerSearchScope.recent
-                                        ? 'No recent customers'
-                                        : 'No customers match',
-                                style: theme.textTheme.titleMedium,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Center(
-                              child: Text(
-                                'Pull to refresh · works offline',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
-                      : ListView.builder(
-                          controller: _scroll,
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          itemCount: c.items.length + (c.hasMore ? 1 : 0),
-                          itemBuilder: (context, index) {
-                            if (index >= c.items.length) {
-                              return Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Center(
-                                  child: c.loadingMore
-                                      ? const CircularProgressIndicator()
-                                      : TextButton(
-                                          onPressed: _controller.loadMore,
-                                          child: const Text('Load more'),
-                                        ),
-                                ),
-                              );
-                            }
-                            final customer = c.items[index];
-                            return ListTile(
-                              leading: CircleAvatar(
-                                child: Text(
-                                  customer.customerName.isEmpty
-                                      ? '?'
-                                      : customer.customerName
-                                          .substring(0, 1)
-                                          .toUpperCase(),
-                                ),
-                              ),
-                              title: Text(customer.displayName),
-                              subtitle: Text(
-                                [
-                                  if ((customer.customerNameAr ?? '').isNotEmpty)
-                                    customer.customerNameAr!,
-                                  if (customer.subtitle.isNotEmpty)
-                                    customer.subtitle,
-                                  if ((customer.email ?? '').isNotEmpty)
-                                    customer.email!,
-                                  if ((customer.crNumber ?? '').isNotEmpty)
-                                    'CR ${customer.crNumber}',
-                                  if ((customer.barcode ?? '').isNotEmpty)
-                                    'BC ${customer.barcode}',
-                                ].join('\n'),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              isThreeLine:
-                                  (customer.customerNameAr ?? '').isNotEmpty,
-                              trailing: IconButton(
-                                tooltip: customer.isFavorite
-                                    ? 'Unfavorite'
-                                    : 'Favorite',
-                                onPressed: () => _toggleFavorite(customer),
-                                icon: Icon(
-                                  customer.isFavorite
-                                      ? Icons.star_rounded
-                                      : Icons.star_outline_rounded,
-                                  color: customer.isFavorite
-                                      ? theme.colorScheme.primary
-                                      : null,
-                                ),
-                              ),
-                              onTap: () => _select(customer),
-                            );
-                          },
+                          ),
                         ),
+                      ],
+                    )
+                  : ListView.builder(
+                      controller: _scroll,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: c.items.length + (c.hasMore ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index >= c.items.length) {
+                          return Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Center(
+                              child: c.loadingMore
+                                  ? const CircularProgressIndicator()
+                                  : TextButton(
+                                      onPressed: _controller.loadMore,
+                                      child: const Text('Load more'),
+                                    ),
+                            ),
+                          );
+                        }
+                        final customer = c.items[index];
+                        return ListTile(
+                          leading: CircleAvatar(
+                            child: Text(
+                              customer.customerName.isEmpty
+                                  ? '?'
+                                  : customer.customerName
+                                        .substring(0, 1)
+                                        .toUpperCase(),
+                            ),
+                          ),
+                          title: Text(customer.displayName),
+                          subtitle: Text(
+                            [
+                              if ((customer.customerNameAr ?? '').isNotEmpty)
+                                customer.customerNameAr!,
+                              if (customer.subtitle.isNotEmpty)
+                                customer.subtitle,
+                              if ((customer.email ?? '').isNotEmpty)
+                                customer.email!,
+                              if ((customer.crNumber ?? '').isNotEmpty)
+                                'CR ${customer.crNumber}',
+                              if ((customer.barcode ?? '').isNotEmpty)
+                                'BC ${customer.barcode}',
+                            ].join('\n'),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          isThreeLine:
+                              (customer.customerNameAr ?? '').isNotEmpty,
+                          trailing: IconButton(
+                            tooltip: customer.isFavorite
+                                ? 'Unfavorite'
+                                : 'Favorite',
+                            onPressed: () => _toggleFavorite(customer),
+                            icon: Icon(
+                              customer.isFavorite
+                                  ? Icons.star_rounded
+                                  : Icons.star_outline_rounded,
+                              color: customer.isFavorite
+                                  ? theme.colorScheme.primary
+                                  : null,
+                            ),
+                          ),
+                          onTap: () => _select(customer),
+                        );
+                      },
+                    ),
             ),
           ),
         ],

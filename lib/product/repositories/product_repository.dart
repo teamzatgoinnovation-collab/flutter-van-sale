@@ -19,10 +19,7 @@ abstract final class ProductApiMethods {
 }
 
 class ProductRepository {
-  ProductRepository(
-    this.db, {
-    this.mapper = const ProductSyncMapper(),
-  });
+  ProductRepository(this.db, {this.mapper = const ProductSyncMapper()});
 
   final VanSaleDb db;
   final ProductSyncMapper mapper;
@@ -33,7 +30,8 @@ class ProductRepository {
 
   Future<ProductDefaults> loadDefaults(VanSaleSession session) async {
     if (!session.connected) {
-      final kept = _defaultsCache.peek ??
+      final kept =
+          _defaultsCache.peek ??
           (_defaults.itemGroups.isNotEmpty || _defaults.uoms.isNotEmpty
               ? _defaults
               : null);
@@ -79,7 +77,11 @@ class ProductRepository {
           _defaultsCache.set(_defaults);
         }
       } catch (e) {
-        AppLogger.warn('product defaults fetch failed', tag: 'Product', error: e);
+        AppLogger.warn(
+          'product defaults fetch failed',
+          tag: 'Product',
+          error: e,
+        );
       }
     }
 
@@ -137,7 +139,8 @@ class ProductRepository {
             continue;
           }
           final now = DateTime.now();
-          final rate = (map['standard_rate'] as num?)?.toDouble() ??
+          final rate =
+              (map['standard_rate'] as num?)?.toDouble() ??
               (map['rate'] as num?)?.toDouble() ??
               existing?.sellingRate ??
               0;
@@ -167,7 +170,8 @@ class ProductRepository {
               erpModified: map['modified'] == null
                   ? existing?.erpModified
                   : '${map['modified']}',
-              imagePath: existing?.imagePath ??
+              imagePath:
+                  existing?.imagePath ??
                   (map['image'] == null || '${map['image']}'.isEmpty
                       ? null
                       : '${map['image']}'),
@@ -225,8 +229,7 @@ class ProductRepository {
   Future<void> toggleFavorite(String productId, {required bool favorite}) =>
       db.setProductFavorite(productId, favorite);
 
-  Future<void> markRecent(String productId) =>
-      db.touchProductRecent(productId);
+  Future<void> markRecent(String productId) => db.touchProductRecent(productId);
 
   Future<void> recordSales(List<OrderLine> lines) =>
       db.recordProductSales(lines);
@@ -415,7 +418,8 @@ class ProductRepository {
         StockLine(
           itemCode: model.itemCode,
           itemName: model.itemName,
-          qty: (await db.getStock(model.itemCode, executor: txn))?.qty ??
+          qty:
+              (await db.getStock(model.itemCode, executor: txn))?.qty ??
               model.openingQuantity,
           uom: model.stockUom,
           unitPrice: model.sellingRate,

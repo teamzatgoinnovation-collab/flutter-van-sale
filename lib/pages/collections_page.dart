@@ -117,20 +117,21 @@ class _CollectionsPageState extends State<CollectionsPage> {
                   child: FilledButton.tonalIcon(
                     onPressed: () async {
                       final sess = session ?? widget.sync.session;
-                      final picked = await Navigator.of(
-                        context,
-                        rootNavigator: true,
-                      ).push<CustomerModel>(
-                        MaterialPageRoute(
-                          fullscreenDialog: true,
-                          builder: (_) => CustomerSearchPage(
-                            session: sess,
-                            sync: widget.sync,
-                            selectMode: true,
-                            initialQuery: customer,
-                          ),
-                        ),
-                      );
+                      final picked =
+                          await Navigator.of(
+                            context,
+                            rootNavigator: true,
+                          ).push<CustomerModel>(
+                            MaterialPageRoute(
+                              fullscreenDialog: true,
+                              builder: (_) => CustomerSearchPage(
+                                session: sess,
+                                sync: widget.sync,
+                                selectMode: true,
+                                initialQuery: customer,
+                              ),
+                            ),
+                          );
                       if (picked == null) return;
                       setLocal(() {
                         selected = picked;
@@ -179,16 +180,16 @@ class _CollectionsPageState extends State<CollectionsPage> {
 
       if (ok != true || !mounted) return;
       if (customer.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Pick a customer')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Pick a customer')));
         return;
       }
       final parsed = double.tryParse(amount.text.trim());
       if (parsed == null || parsed <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enter a valid amount')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Enter a valid amount')));
         return;
       }
 
@@ -244,7 +245,7 @@ class _CollectionsPageState extends State<CollectionsPage> {
 
     return PageScaffold(
       title: 'Cash',
-      subtitle: 'Payment Entry · safe client_id sync',
+      subtitle: 'Record collections · sync when online',
       onOpenMenu: widget.onOpenMenu,
       floatingActionButton: HeroMode(
         enabled: false,

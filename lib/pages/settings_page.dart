@@ -132,9 +132,9 @@ class _SettingsPageState extends State<SettingsPage> {
       padding: const EdgeInsets.only(top: 8, bottom: 8),
       child: Text(
         title,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w700,
-        ),
+        style: Theme.of(
+          context,
+        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -149,8 +149,7 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           Text(
-            'ERPNext connection, van defaults, and device policy. Sales sync to '
-            'Sales Invoice / Payment Entry / Stock Entry.',
+            'Site connection, van defaults, and device policy.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -194,7 +193,7 @@ class _SettingsPageState extends State<SettingsPage> {
             controller: _warehouse,
             decoration: const InputDecoration(
               labelText: 'Van warehouse',
-              hintText: 'ERPNext Warehouse name',
+              hintText: 'Warehouse name',
               prefixIcon: Icon(Icons.warehouse_outlined),
             ),
           ),

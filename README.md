@@ -1,12 +1,12 @@
 # VanSale — Flutter client
 
-**Status:** ERPNext-backed van sales (SQLite cache + idempotent outbox)  
-**Backend:** `zatgo_core.api.v1.go_van.*` → Sales Invoice / Payment Entry / Stock Entry / ZG Trip  
+**Status:** Offline-first van sales (SQLite cache + sync outbox)  
+**Backend:** ZatGo Core van APIs  
 **SDK:** [`SharedSDK/dart_sdk`](../../../SharedSDK/dart_sdk/)
 
 ## Auth
 
-Sign in with ERPNext **site URL + email/password**. No offline mock mode.
+Sign in with **site URL + email/password**.
 
 ```bash
 --dart-define=FRAPPE_BASE_URL=https://erp.zatgo.online
@@ -24,19 +24,17 @@ flutter run
 
 | Tab | Role |
 |-----|------|
-| Today | ZG Trip route, visit status, sync |
-| Sell | Sales Invoice from van stock |
-| Cash | Payment Entry collections |
-| Stock | Bin balances for van warehouse |
+| Today | Route stops, visit status, sync |
+| Sell | Sales from van stock |
+| Cash | Collections |
+| Stock | Van warehouse balances |
 
 **Drawer:** Settings (site URL, warehouse, company), Sync, Sign out
 
 ## Offline + sync
 
-- SQLite caches ERP pulls and queues writes with stable `client_id`
-- Flush requires ERP ack (`erp_name`) before dropping outbox rows
-- **Customers** are offline-first: local SQLite → `accounting.customers.sync`
-  creates Customer + Contact + Address + attachments (idempotent `zatgo_client_id`)
-- **Products** are normally pulled from ERPNext Item; optional offline create →
-  `warehouse.items.sync` (Item + barcode/price/opening stock/images)
-- Customer/product outbox flushes **before** sales/collections so names resolve in ERPNext
+- SQLite caches pulls and queues writes with a stable `client_id`
+- Flush waits for server ack before dropping outbox rows
+- **Customers** are offline-first: local SQLite → server sync
+- **Products** are pulled from the catalog; optional offline create is supported
+- Customer/product outbox flushes **before** sales/collections so names resolve on the server

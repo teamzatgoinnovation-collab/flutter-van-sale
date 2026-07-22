@@ -89,7 +89,7 @@ class _StockPageState extends State<StockPage> {
   Widget build(BuildContext context) {
     return PageScaffold(
       title: 'Van stock',
-      subtitle: 'ERPNext Bin · set warehouse in Settings',
+      subtitle: 'Van warehouse stock · set warehouse in Settings',
       onOpenMenu: widget.onOpenMenu,
       child: _stock.isEmpty
           ? const EmptyHint(

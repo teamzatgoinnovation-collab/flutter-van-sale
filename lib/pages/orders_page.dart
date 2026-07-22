@@ -120,7 +120,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
     return PageScaffold(
       title: 'Sell',
-      subtitle: 'Queue sales · sync as Sales Invoice',
+      subtitle: 'Queue sales · sync when online',
       onOpenMenu: widget.onOpenMenu,
       floatingActionButton: HeroMode(
         enabled: false,

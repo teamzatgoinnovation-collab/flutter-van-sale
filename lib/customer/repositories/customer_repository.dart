@@ -20,10 +20,7 @@ abstract final class CustomerApiMethods {
 
 /// Offline-first customer repository (local SQLite → ERPNext sync).
 class CustomerRepository {
-  CustomerRepository(
-    this.db, {
-    this.mapper = const CustomerSyncMapper(),
-  });
+  CustomerRepository(this.db, {this.mapper = const CustomerSyncMapper()});
 
   final VanSaleDb db;
   final CustomerSyncMapper mapper;
@@ -34,7 +31,8 @@ class CustomerRepository {
 
   Future<CustomerDefaults> loadDefaults(VanSaleSession session) async {
     if (!session.connected) {
-      final kept = _defaultsCache.peek ??
+      final kept =
+          _defaultsCache.peek ??
           (_defaults.customerGroups.isNotEmpty ? _defaults : null);
       if (kept != null) {
         _defaults = kept;
@@ -68,9 +66,7 @@ class CustomerRepository {
       _defaults = cached;
     } else {
       try {
-        final env = await session.store.callMethod(
-          CustomerApiMethods.defaults,
-        );
+        final env = await session.store.callMethod(CustomerApiMethods.defaults);
         if (env.data is Map) {
           _defaults = CustomerDefaults.fromJson(
             Map<String, dynamic>.from(env.data as Map),
@@ -78,7 +74,11 @@ class CustomerRepository {
           _defaultsCache.set(_defaults);
         }
       } catch (e) {
-        AppLogger.warn('customer defaults fetch failed', tag: 'Customer', error: e);
+        AppLogger.warn(
+          'customer defaults fetch failed',
+          tag: 'Customer',
+          error: e,
+        );
         // Keep last / fallback defaults offline.
       }
     }
@@ -160,7 +160,8 @@ class CustomerRepository {
           final erpName = '${map['id'] ?? map['name'] ?? ''}'.trim();
           if (erpName.isEmpty) continue;
 
-          final existing = await db.getCustomer('erp_$erpName') ??
+          final existing =
+              await db.getCustomer('erp_$erpName') ??
               await _findLocalByErpName(erpName);
           if (existing != null &&
               existing.syncStatus != SyncStatus.uploaded &&
@@ -169,18 +170,18 @@ class CustomerRepository {
           }
 
           final now = DateTime.now();
-          final fav = existing != null &&
-              await db.isCustomerFavorite(existing.id);
+          final fav =
+              existing != null && await db.isCustomerFavorite(existing.id);
           await db.upsertCustomer(
             CustomerModel(
               id: existing?.id ?? 'erp_$erpName',
               clientId: existing?.clientId ?? 'erp_$erpName',
-              customerName:
-                  '${map['customer_name'] ?? map['name'] ?? erpName}',
+              customerName: '${map['customer_name'] ?? map['name'] ?? erpName}',
               customerNameAr: map['customer_name_ar'] == null
                   ? existing?.customerNameAr
                   : '${map['customer_name_ar']}',
-              customerType: '${map['customer_type'] ?? existing?.customerType ?? 'Company'}',
+              customerType:
+                  '${map['customer_type'] ?? existing?.customerType ?? 'Company'}',
               customerGroup:
                   '${map['customer_group'] ?? existing?.customerGroup ?? _defaults.customerGroup}',
               territory:

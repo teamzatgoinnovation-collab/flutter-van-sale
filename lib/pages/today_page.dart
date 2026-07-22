@@ -112,8 +112,8 @@ class _TodayPageState extends State<TodayPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Sell from the van, collect cash, complete visits. '
-                  'Data syncs to ERPNext Sales Invoice / Payment Entry.',
+                  'Sell from the van, collect cash, and complete visits. '
+                  'Changes sync when you are online.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -207,8 +207,7 @@ class _TodayPageState extends State<TodayPage> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'No trips from ERPNext yet. Create ZG Trip '
-                              'records on the site, then Sync.',
+                              'No trips yet. Sync after trips are assigned on the site.',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),

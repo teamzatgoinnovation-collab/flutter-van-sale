@@ -195,9 +195,11 @@ class _SellOrderPageState extends State<SellOrderPage> {
     );
     if (picked == null || !mounted) return;
     await productRepository.markRecent(picked.id);
-    final existing = await vanSaleRepo.getStock(picked.displayCode) ??
+    final existing =
+        await vanSaleRepo.getStock(picked.displayCode) ??
         await vanSaleRepo.getStock(picked.itemCode);
-    final line = existing ??
+    final line =
+        existing ??
         StockLine(
           itemCode: picked.displayCode,
           itemName: picked.itemName,
@@ -229,7 +231,8 @@ class _SellOrderPageState extends State<SellOrderPage> {
       ),
     );
     if (created == null || !mounted) return;
-    var line = await vanSaleRepo.getStock(created.displayCode) ??
+    var line =
+        await vanSaleRepo.getStock(created.displayCode) ??
         await vanSaleRepo.getStock(created.itemCode);
     if (line == null) {
       line = StockLine(
@@ -493,7 +496,8 @@ class _SellOrderPageState extends State<SellOrderPage> {
                   total: _total,
                   lineCount: _lineCount,
                   saving: _saving,
-                  canSubmit: !_saving &&
+                  canSubmit:
+                      !_saving &&
                       _customerLabel.trim().isNotEmpty &&
                       _lineCount > 0 &&
                       !_hasOverStock,
@@ -584,10 +588,7 @@ class _CustomerCard extends StatelessWidget {
                 onPressed: enabled ? onNew : null,
                 icon: const Icon(Icons.person_add_outlined),
               ),
-              Icon(
-                Icons.chevron_right,
-                color: scheme.onSurfaceVariant,
-              ),
+              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
             ],
           ),
         ),
@@ -644,9 +645,7 @@ class _CartLineTile extends StatelessWidget {
                         '${money(line.stock.qty)} ${line.stock.uom} on van · '
                         '${money(line.stock.unitPrice)} each',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: over
-                              ? scheme.error
-                              : scheme.onSurfaceVariant,
+                          color: over ? scheme.error : scheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -731,7 +730,8 @@ class _StockQuickTile extends StatelessWidget {
           '${low ? ' · low' : ''} · ${money(stock.unitPrice)}',
         ),
         trailing: FilledButton.tonal(
-          onPressed: enabled &&
+          onPressed:
+              enabled &&
                   (VanSalePolicy.instance.allowNegativeStock || stock.qty > 0)
               ? onAdd
               : null,
@@ -818,12 +818,13 @@ class _QtyStepperState extends State<_QtyStepper> {
               focusNode: _focus,
               enabled: widget.enabled,
               textAlign: TextAlign.center,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
               decoration: const InputDecoration(
                 isDense: true,
                 border: InputBorder.none,

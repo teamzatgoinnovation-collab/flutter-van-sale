@@ -156,7 +156,7 @@ class _LoginPageState extends State<LoginPage>
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Sign in to ERPNext. Route, stock, and sales come from the site.',
+                        'Sign in with your site URL and account to load routes, stock, and sales.',
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: scheme.onSurfaceVariant,

@@ -58,9 +58,9 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
       setState(() => assign(file.path));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not pick image: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not pick image: $e')));
     }
   }
 
@@ -195,208 +195,219 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                  const SizedBox(height: 16),
-                  _section('Name & business'),
-                  TextFormField(
-                    initialValue: _draft.customerNameAr,
-                    decoration: const InputDecoration(
-                      labelText: 'Customer Name Arabic',
-                    ),
-                    onChanged: (v) => _draft.customerNameAr = v,
-                  ),
-                  TextFormField(
-                    initialValue: _draft.taxId,
-                    decoration: const InputDecoration(
-                      labelText: 'VAT Number (Tax ID)',
-                      hintText: '15 digits starting with 3',
-                    ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (v) => _draft.taxId = v,
-                  ),
-                  TextFormField(
-                    initialValue: _draft.crNumber,
-                    decoration: const InputDecoration(
-                      labelText: 'Commercial Registration (CR)',
-                    ),
-                    onChanged: (v) => _draft.crNumber = v,
-                  ),
-                  TextFormField(
-                    initialValue: _draft.customerCode,
-                    decoration: const InputDecoration(
-                      labelText: 'Customer Code',
-                    ),
-                    onChanged: (v) => _draft.customerCode = v,
-                  ),
-                  TextFormField(
-                    initialValue: _draft.barcode,
-                    decoration: const InputDecoration(
-                      labelText: 'Barcode / loyalty card',
-                    ),
-                    onChanged: (v) => _draft.barcode = v,
-                  ),
-                  TextFormField(
-                    initialValue: _draft.website,
-                    decoration: const InputDecoration(labelText: 'Website'),
-                    keyboardType: TextInputType.url,
-                    onChanged: (v) => _draft.website = v,
-                  ),
-                  _dropdownOrField(
-                    label: 'Industry',
-                    value: _draft.industry,
-                    options: _defaults.industries,
-                    allowEmpty: true,
-                    onChanged: (v) => setState(() => _draft.industry = v),
-                  ),
-                  const SizedBox(height: 16),
-                  _section('More contact'),
-                  TextFormField(
-                    initialValue: _draft.phone,
-                    decoration: const InputDecoration(labelText: 'Phone Number'),
-                    keyboardType: TextInputType.phone,
-                    onChanged: (v) => _draft.phone = v,
-                  ),
-                  TextFormField(
-                    initialValue: _draft.email,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    keyboardType: TextInputType.emailAddress,
-                    onChanged: (v) => _draft.email = v,
-                  ),
-                  const SizedBox(height: 16),
-                  _section('More address'),
-                  TextFormField(
-                    initialValue: _draft.addressLine2,
-                    decoration: const InputDecoration(
-                      labelText: 'Address Line 2',
-                    ),
-                    onChanged: (v) => _draft.addressLine2 = v,
-                  ),
-                  TextFormField(
-                    initialValue: _draft.state,
-                    decoration: const InputDecoration(labelText: 'State'),
-                    onChanged: (v) => _draft.state = v,
-                  ),
-                  TextFormField(
-                    initialValue: _draft.postalCode,
-                    decoration: const InputDecoration(labelText: 'Postal Code'),
-                    onChanged: (v) => _draft.postalCode = v,
-                  ),
-                  TextFormField(
-                    initialValue: _draft.googleMapUrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Google Map Location (URL)',
-                    ),
-                    onChanged: (v) => _draft.googleMapUrl = v,
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: _draft.latitude?.toString() ?? '',
-                          decoration: const InputDecoration(
-                            labelText: 'Latitude',
-                          ),
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                            signed: true,
-                          ),
-                          onChanged: (v) =>
-                              _draft.latitude = double.tryParse(v.trim()),
+                      const SizedBox(height: 16),
+                      _section('Name & business'),
+                      TextFormField(
+                        initialValue: _draft.customerNameAr,
+                        decoration: const InputDecoration(
+                          labelText: 'Customer Name Arabic',
                         ),
+                        onChanged: (v) => _draft.customerNameAr = v,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: _draft.longitude?.toString() ?? '',
-                          decoration: const InputDecoration(
-                            labelText: 'Longitude',
-                          ),
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                            signed: true,
-                          ),
-                          onChanged: (v) =>
-                              _draft.longitude = double.tryParse(v.trim()),
+                      TextFormField(
+                        initialValue: _draft.taxId,
+                        decoration: const InputDecoration(
+                          labelText: 'VAT Number (Tax ID)',
+                          hintText: '15 digits starting with 3',
                         ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (v) => _draft.taxId = v,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _section('Sales'),
-                  _dropdownOrField(
-                    label: 'Price List',
-                    value: _draft.priceList,
-                    options: _defaults.priceLists,
-                    allowEmpty: true,
-                    onChanged: (v) => setState(() => _draft.priceList = v),
-                  ),
-                  _dropdownOrField(
-                    label: 'Sales Person',
-                    value: _draft.salesPerson,
-                    options: _defaults.salesPersons,
-                    allowEmpty: true,
-                    onChanged: (v) => setState(() => _draft.salesPerson = v),
-                  ),
-                  TextFormField(
-                    initialValue: _draft.creditLimit?.toString() ?? '',
-                    decoration: const InputDecoration(labelText: 'Credit Limit'),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (v) =>
-                        _draft.creditLimit = double.tryParse(v.trim()),
-                  ),
-                  _dropdownOrField(
-                    label: 'Payment Terms Template',
-                    value: _draft.paymentTerms,
-                    options: _defaults.paymentTermsTemplates,
-                    allowEmpty: true,
-                    onChanged: (v) => setState(() => _draft.paymentTerms = v),
-                  ),
-                  _dropdownOrField(
-                    label: 'Currency',
-                    value: _draft.currency,
-                    options: _defaults.currencies,
-                    allowEmpty: true,
-                    onChanged: (v) => setState(() => _draft.currency = v),
-                  ),
-                  const SizedBox(height: 16),
-                  _section('Status & notes'),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(_draft.enabled ? 'Enabled' : 'Disabled'),
-                    value: _draft.enabled,
-                    onChanged: (v) => setState(() => _draft.enabled = v),
-                  ),
-                  TextFormField(
-                    initialValue: _draft.remarks,
-                    decoration: const InputDecoration(labelText: 'Remarks'),
-                    maxLines: 3,
-                    onChanged: (v) => _draft.remarks = v,
-                  ),
-                  const SizedBox(height: 16),
-                  _section('Attachments'),
-                  _attachTile(
-                    label: 'Commercial Registration Image',
-                    path: _draft.crImagePath,
-                    onPick: () => _pickImage((p) => _draft.crImagePath = p),
-                    onClear: () => setState(() => _draft.crImagePath = null),
-                  ),
-                  _attachTile(
-                    label: 'VAT Certificate',
-                    path: _draft.vatCertificatePath,
-                    onPick: () =>
-                        _pickImage((p) => _draft.vatCertificatePath = p),
-                    onClear: () =>
-                        setState(() => _draft.vatCertificatePath = null),
-                  ),
-                  _attachTile(
-                    label: 'Customer Photo',
-                    path: _draft.customerPhotoPath,
-                    onPick: () =>
-                        _pickImage((p) => _draft.customerPhotoPath = p),
-                    onClear: () =>
-                        setState(() => _draft.customerPhotoPath = null),
-                  ),
+                      TextFormField(
+                        initialValue: _draft.crNumber,
+                        decoration: const InputDecoration(
+                          labelText: 'Commercial Registration (CR)',
+                        ),
+                        onChanged: (v) => _draft.crNumber = v,
+                      ),
+                      TextFormField(
+                        initialValue: _draft.customerCode,
+                        decoration: const InputDecoration(
+                          labelText: 'Customer Code',
+                        ),
+                        onChanged: (v) => _draft.customerCode = v,
+                      ),
+                      TextFormField(
+                        initialValue: _draft.barcode,
+                        decoration: const InputDecoration(
+                          labelText: 'Barcode / loyalty card',
+                        ),
+                        onChanged: (v) => _draft.barcode = v,
+                      ),
+                      TextFormField(
+                        initialValue: _draft.website,
+                        decoration: const InputDecoration(labelText: 'Website'),
+                        keyboardType: TextInputType.url,
+                        onChanged: (v) => _draft.website = v,
+                      ),
+                      _dropdownOrField(
+                        label: 'Industry',
+                        value: _draft.industry,
+                        options: _defaults.industries,
+                        allowEmpty: true,
+                        onChanged: (v) => setState(() => _draft.industry = v),
+                      ),
+                      const SizedBox(height: 16),
+                      _section('More contact'),
+                      TextFormField(
+                        initialValue: _draft.phone,
+                        decoration: const InputDecoration(
+                          labelText: 'Phone Number',
+                        ),
+                        keyboardType: TextInputType.phone,
+                        onChanged: (v) => _draft.phone = v,
+                      ),
+                      TextFormField(
+                        initialValue: _draft.email,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                        keyboardType: TextInputType.emailAddress,
+                        onChanged: (v) => _draft.email = v,
+                      ),
+                      const SizedBox(height: 16),
+                      _section('More address'),
+                      TextFormField(
+                        initialValue: _draft.addressLine2,
+                        decoration: const InputDecoration(
+                          labelText: 'Address Line 2',
+                        ),
+                        onChanged: (v) => _draft.addressLine2 = v,
+                      ),
+                      TextFormField(
+                        initialValue: _draft.state,
+                        decoration: const InputDecoration(labelText: 'State'),
+                        onChanged: (v) => _draft.state = v,
+                      ),
+                      TextFormField(
+                        initialValue: _draft.postalCode,
+                        decoration: const InputDecoration(
+                          labelText: 'Postal Code',
+                        ),
+                        onChanged: (v) => _draft.postalCode = v,
+                      ),
+                      TextFormField(
+                        initialValue: _draft.googleMapUrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Google Map Location (URL)',
+                        ),
+                        onChanged: (v) => _draft.googleMapUrl = v,
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: _draft.latitude?.toString() ?? '',
+                              decoration: const InputDecoration(
+                                labelText: 'Latitude',
+                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                    signed: true,
+                                  ),
+                              onChanged: (v) =>
+                                  _draft.latitude = double.tryParse(v.trim()),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: _draft.longitude?.toString() ?? '',
+                              decoration: const InputDecoration(
+                                labelText: 'Longitude',
+                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                    signed: true,
+                                  ),
+                              onChanged: (v) =>
+                                  _draft.longitude = double.tryParse(v.trim()),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _section('Sales'),
+                      _dropdownOrField(
+                        label: 'Price List',
+                        value: _draft.priceList,
+                        options: _defaults.priceLists,
+                        allowEmpty: true,
+                        onChanged: (v) => setState(() => _draft.priceList = v),
+                      ),
+                      _dropdownOrField(
+                        label: 'Sales Person',
+                        value: _draft.salesPerson,
+                        options: _defaults.salesPersons,
+                        allowEmpty: true,
+                        onChanged: (v) =>
+                            setState(() => _draft.salesPerson = v),
+                      ),
+                      TextFormField(
+                        initialValue: _draft.creditLimit?.toString() ?? '',
+                        decoration: const InputDecoration(
+                          labelText: 'Credit Limit',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        onChanged: (v) =>
+                            _draft.creditLimit = double.tryParse(v.trim()),
+                      ),
+                      _dropdownOrField(
+                        label: 'Payment Terms Template',
+                        value: _draft.paymentTerms,
+                        options: _defaults.paymentTermsTemplates,
+                        allowEmpty: true,
+                        onChanged: (v) =>
+                            setState(() => _draft.paymentTerms = v),
+                      ),
+                      _dropdownOrField(
+                        label: 'Currency',
+                        value: _draft.currency,
+                        options: _defaults.currencies,
+                        allowEmpty: true,
+                        onChanged: (v) => setState(() => _draft.currency = v),
+                      ),
+                      const SizedBox(height: 16),
+                      _section('Status & notes'),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(_draft.enabled ? 'Enabled' : 'Disabled'),
+                        value: _draft.enabled,
+                        onChanged: (v) => setState(() => _draft.enabled = v),
+                      ),
+                      TextFormField(
+                        initialValue: _draft.remarks,
+                        decoration: const InputDecoration(labelText: 'Remarks'),
+                        maxLines: 3,
+                        onChanged: (v) => _draft.remarks = v,
+                      ),
+                      const SizedBox(height: 16),
+                      _section('Attachments'),
+                      _attachTile(
+                        label: 'Commercial Registration Image',
+                        path: _draft.crImagePath,
+                        onPick: () => _pickImage((p) => _draft.crImagePath = p),
+                        onClear: () =>
+                            setState(() => _draft.crImagePath = null),
+                      ),
+                      _attachTile(
+                        label: 'VAT Certificate',
+                        path: _draft.vatCertificatePath,
+                        onPick: () =>
+                            _pickImage((p) => _draft.vatCertificatePath = p),
+                        onClear: () =>
+                            setState(() => _draft.vatCertificatePath = null),
+                      ),
+                      _attachTile(
+                        label: 'Customer Photo',
+                        path: _draft.customerPhotoPath,
+                        onPick: () =>
+                            _pickImage((p) => _draft.customerPhotoPath = p),
+                        onClear: () =>
+                            setState(() => _draft.customerPhotoPath = null),
+                      ),
                     ],
                   ),
                 ),
@@ -462,10 +473,7 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
       decoration: InputDecoration(labelText: label),
       items: [
         for (final o in items)
-          DropdownMenuItem(
-            value: o,
-            child: Text(o.isEmpty ? '— None —' : o),
-          ),
+          DropdownMenuItem(value: o, child: Text(o.isEmpty ? '— None —' : o)),
       ],
       onChanged: (v) {
         if (v != null) onChanged(v);

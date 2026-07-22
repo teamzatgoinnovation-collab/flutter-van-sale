@@ -668,14 +668,26 @@ CREATE TABLE IF NOT EXISTS sync_logs (
 
   // --- customers ---
 
-  Future<void> upsertCustomer(CustomerModel c, {DatabaseExecutor? executor}) async {
+  Future<void> upsertCustomer(
+    CustomerModel c, {
+    DatabaseExecutor? executor,
+  }) async {
     final db = executor ?? await database;
-    await db.insert('customers', _customerToRow(c), conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'customers',
+      _customerToRow(c),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<CustomerModel?> getCustomer(String id) async {
     final db = await database;
-    final rows = await db.query('customers', where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await db.query(
+      'customers',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (rows.isEmpty) return null;
     return _customerFromRow(rows.first);
   }
@@ -737,7 +749,8 @@ CREATE TABLE IF NOT EXISTS sync_logs (
       orderBy = 'f.created_at DESC';
       countSql =
           'SELECT COUNT(*) AS c FROM customers c INNER JOIN customer_favorites f ON f.customer_id = c.id WHERE $whereSql';
-      listSql = '''
+      listSql =
+          '''
 SELECT c.*, 1 AS is_favorite
 FROM customers c
 INNER JOIN customer_favorites f ON f.customer_id = c.id
@@ -749,7 +762,8 @@ LIMIT ? OFFSET ?
       orderBy = 'r.used_at DESC';
       countSql =
           'SELECT COUNT(*) AS c FROM customers c INNER JOIN customer_recent r ON r.customer_id = c.id WHERE $whereSql';
-      listSql = '''
+      listSql =
+          '''
 SELECT c.*,
   CASE WHEN fav.customer_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite
 FROM customers c
@@ -762,7 +776,8 @@ LIMIT ? OFFSET ?
     } else {
       orderBy = 'c.customer_name COLLATE NOCASE ASC';
       countSql = 'SELECT COUNT(*) AS c FROM customers c WHERE $whereSql';
-      listSql = '''
+      listSql =
+          '''
 SELECT c.*,
   CASE WHEN fav.customer_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite
 FROM customers c
@@ -777,11 +792,13 @@ LIMIT ? OFFSET ?
     final total = (countRows.first['c'] as num?)?.toInt() ?? 0;
 
     final rows = await db.rawQuery(listSql, [...args, limit, offset]);
-    final items = rows.map((r) {
-      final model = _customerFromRow(r);
-      final fav = (r['is_favorite'] as num?)?.toInt() == 1;
-      return model.copyWith(isFavorite: fav);
-    }).toList(growable: false);
+    final items = rows
+        .map((r) {
+          final model = _customerFromRow(r);
+          final fav = (r['is_favorite'] as num?)?.toInt() == 1;
+          return model.copyWith(isFavorite: fav);
+        })
+        .toList(growable: false);
 
     return CustomerSearchResult(
       items: items,
@@ -816,14 +833,10 @@ LIMIT 1
   Future<void> setCustomerFavorite(String customerId, bool favorite) async {
     final db = await database;
     if (favorite) {
-      await db.insert(
-        'customer_favorites',
-        {
-          'customer_id': customerId,
-          'created_at': DateTime.now().toIso8601String(),
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await db.insert('customer_favorites', {
+        'customer_id': customerId,
+        'created_at': DateTime.now().toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     } else {
       await db.delete(
         'customer_favorites',
@@ -846,14 +859,10 @@ LIMIT 1
 
   Future<void> touchCustomerRecent(String customerId) async {
     final db = await database;
-    await db.insert(
-      'customer_recent',
-      {
-        'customer_id': customerId,
-        'used_at': DateTime.now().toIso8601String(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('customer_recent', {
+      'customer_id': customerId,
+      'used_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
     // Keep last 50
     await _trimRecentTable('customer_recent', 'customer_id', keep: 50);
   }
@@ -942,97 +951,94 @@ DELETE FROM $table WHERE $idColumn NOT IN (
   }
 
   Map<String, Object?> _customerToRow(CustomerModel c) => {
-        'id': c.id,
-        'client_id': c.clientId,
-        'erp_name': c.erpName,
-        'erp_modified': c.erpModified,
-        'sync_status': c.syncStatus.name,
-        'last_error': c.lastError,
-        'customer_name': c.customerName,
-        'customer_name_ar': c.customerNameAr,
-        'customer_type': c.customerType,
-        'customer_group': c.customerGroup,
-        'territory': c.territory,
-        'tax_id': c.taxId,
-        'cr_number': c.crNumber,
-        'customer_code': c.customerCode,
-        'website': c.website,
-        'industry': c.industry,
-        'mobile_no': c.mobileNo,
-        'phone': c.phone,
-        'email': c.email,
-        'address_line1': c.addressLine1,
-        'address_line2': c.addressLine2,
-        'city': c.city,
-        'state': c.state,
-        'country': c.country,
-        'postal_code': c.postalCode,
-        'google_map_url': c.googleMapUrl,
-        'latitude': c.latitude,
-        'longitude': c.longitude,
-        'price_list': c.priceList,
-        'sales_person': c.salesPerson,
-        'credit_limit': c.creditLimit,
-        'payment_terms': c.paymentTerms,
-        'currency': c.currency,
-        'enabled': c.enabled ? 1 : 0,
-        'remarks': c.remarks,
-        'cr_image_path': c.crImagePath,
-        'vat_certificate_path': c.vatCertificatePath,
-        'customer_photo_path': c.customerPhotoPath,
-        'barcode': c.barcode,
-        'created_at': c.createdAt.toIso8601String(),
-        'updated_at': c.updatedAt.toIso8601String(),
-      };
+    'id': c.id,
+    'client_id': c.clientId,
+    'erp_name': c.erpName,
+    'erp_modified': c.erpModified,
+    'sync_status': c.syncStatus.name,
+    'last_error': c.lastError,
+    'customer_name': c.customerName,
+    'customer_name_ar': c.customerNameAr,
+    'customer_type': c.customerType,
+    'customer_group': c.customerGroup,
+    'territory': c.territory,
+    'tax_id': c.taxId,
+    'cr_number': c.crNumber,
+    'customer_code': c.customerCode,
+    'website': c.website,
+    'industry': c.industry,
+    'mobile_no': c.mobileNo,
+    'phone': c.phone,
+    'email': c.email,
+    'address_line1': c.addressLine1,
+    'address_line2': c.addressLine2,
+    'city': c.city,
+    'state': c.state,
+    'country': c.country,
+    'postal_code': c.postalCode,
+    'google_map_url': c.googleMapUrl,
+    'latitude': c.latitude,
+    'longitude': c.longitude,
+    'price_list': c.priceList,
+    'sales_person': c.salesPerson,
+    'credit_limit': c.creditLimit,
+    'payment_terms': c.paymentTerms,
+    'currency': c.currency,
+    'enabled': c.enabled ? 1 : 0,
+    'remarks': c.remarks,
+    'cr_image_path': c.crImagePath,
+    'vat_certificate_path': c.vatCertificatePath,
+    'customer_photo_path': c.customerPhotoPath,
+    'barcode': c.barcode,
+    'created_at': c.createdAt.toIso8601String(),
+    'updated_at': c.updatedAt.toIso8601String(),
+  };
 
   CustomerModel _customerFromRow(Map<String, Object?> r) {
     return CustomerModel(
       id: '${r['id']}',
       clientId: '${r['client_id']}',
       erpName: r['erp_name'] == null ? null : '${r['erp_name']}',
-      erpModified:
-          r['erp_modified'] == null ? null : '${r['erp_modified']}',
+      erpModified: r['erp_modified'] == null ? null : '${r['erp_modified']}',
       syncStatus: _syncStatusFrom('${r['sync_status']}'),
       lastError: r['last_error'] == null ? null : '${r['last_error']}',
       customerName: '${r['customer_name']}',
-      customerNameAr:
-          r['customer_name_ar'] == null ? null : '${r['customer_name_ar']}',
+      customerNameAr: r['customer_name_ar'] == null
+          ? null
+          : '${r['customer_name_ar']}',
       customerType: '${r['customer_type']}',
       customerGroup: '${r['customer_group']}',
       territory: '${r['territory']}',
       taxId: r['tax_id'] == null ? null : '${r['tax_id']}',
       crNumber: r['cr_number'] == null ? null : '${r['cr_number']}',
-      customerCode:
-          r['customer_code'] == null ? null : '${r['customer_code']}',
+      customerCode: r['customer_code'] == null ? null : '${r['customer_code']}',
       website: r['website'] == null ? null : '${r['website']}',
       industry: r['industry'] == null ? null : '${r['industry']}',
       mobileNo: '${r['mobile_no'] ?? ''}',
       phone: r['phone'] == null ? null : '${r['phone']}',
       email: r['email'] == null ? null : '${r['email']}',
       addressLine1: '${r['address_line1'] ?? ''}',
-      addressLine2:
-          r['address_line2'] == null ? null : '${r['address_line2']}',
+      addressLine2: r['address_line2'] == null ? null : '${r['address_line2']}',
       city: '${r['city'] ?? ''}',
       state: r['state'] == null ? null : '${r['state']}',
       country: '${r['country'] ?? 'Saudi Arabia'}',
       postalCode: r['postal_code'] == null ? null : '${r['postal_code']}',
-      googleMapUrl:
-          r['google_map_url'] == null ? null : '${r['google_map_url']}',
+      googleMapUrl: r['google_map_url'] == null
+          ? null
+          : '${r['google_map_url']}',
       latitude: (r['latitude'] as num?)?.toDouble(),
       longitude: (r['longitude'] as num?)?.toDouble(),
       priceList: r['price_list'] == null ? null : '${r['price_list']}',
       salesPerson: r['sales_person'] == null ? null : '${r['sales_person']}',
       creditLimit: (r['credit_limit'] as num?)?.toDouble(),
-      paymentTerms:
-          r['payment_terms'] == null ? null : '${r['payment_terms']}',
+      paymentTerms: r['payment_terms'] == null ? null : '${r['payment_terms']}',
       currency: r['currency'] == null ? null : '${r['currency']}',
       enabled: (r['enabled'] as num?)?.toInt() != 0,
       remarks: r['remarks'] == null ? null : '${r['remarks']}',
       barcode: r['barcode'] == null || '${r['barcode']}'.isEmpty
           ? null
           : '${r['barcode']}',
-      crImagePath:
-          r['cr_image_path'] == null ? null : '${r['cr_image_path']}',
+      crImagePath: r['cr_image_path'] == null ? null : '${r['cr_image_path']}',
       vatCertificatePath: r['vat_certificate_path'] == null
           ? null
           : '${r['vat_certificate_path']}',
@@ -1046,7 +1052,10 @@ DELETE FROM $table WHERE $idColumn NOT IN (
 
   // --- products ---
 
-  Future<void> upsertProduct(ProductModel p, {DatabaseExecutor? executor}) async {
+  Future<void> upsertProduct(
+    ProductModel p, {
+    DatabaseExecutor? executor,
+  }) async {
     final db = executor ?? await database;
     await db.insert(
       'products',
@@ -1057,8 +1066,12 @@ DELETE FROM $table WHERE $idColumn NOT IN (
 
   Future<ProductModel?> getProduct(String id) async {
     final db = await database;
-    final rows =
-        await db.query('products', where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await db.query(
+      'products',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (rows.isEmpty) return null;
     return _productFromRow(rows.first);
   }
@@ -1117,7 +1130,8 @@ DELETE FROM $table WHERE $idColumn NOT IN (
     if (favoritesOnly) {
       countSql =
           'SELECT COUNT(*) AS c FROM products p INNER JOIN product_favorites f ON f.product_id = p.id WHERE $whereSql';
-      listSql = '''
+      listSql =
+          '''
 SELECT p.*,
   1 AS is_favorite,
   COALESCE(s.qty, 0) AS stock_qty,
@@ -1132,7 +1146,8 @@ LIMIT ? OFFSET ?
     } else if (recentOnly) {
       countSql =
           'SELECT COUNT(*) AS c FROM products p INNER JOIN product_recent r ON r.product_id = p.id WHERE $whereSql';
-      listSql = '''
+      listSql =
+          '''
 SELECT p.*,
   CASE WHEN fav.product_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite,
   COALESCE(s.qty, 0) AS stock_qty,
@@ -1146,12 +1161,14 @@ ORDER BY r.used_at DESC
 LIMIT ? OFFSET ?
 ''';
     } else if (frequentOnly) {
-      countSql = '''
+      countSql =
+          '''
 SELECT COUNT(*) AS c FROM products p
 INNER JOIN product_sales_stats st ON st.item_code = p.item_code
 WHERE $whereSql AND st.sold_count > 0
 ''';
-      listSql = '''
+      listSql =
+          '''
 SELECT p.*,
   CASE WHEN fav.product_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite,
   COALESCE(s.qty, 0) AS stock_qty,
@@ -1166,7 +1183,8 @@ LIMIT ? OFFSET ?
 ''';
     } else {
       countSql = 'SELECT COUNT(*) AS c FROM products p WHERE $whereSql';
-      listSql = '''
+      listSql =
+          '''
 SELECT p.*,
   CASE WHEN fav.product_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite,
   COALESCE(s.qty, 0) AS stock_qty,
@@ -1228,14 +1246,10 @@ LIMIT 1
   Future<void> setProductFavorite(String productId, bool favorite) async {
     final db = await database;
     if (favorite) {
-      await db.insert(
-        'product_favorites',
-        {
-          'product_id': productId,
-          'created_at': DateTime.now().toIso8601String(),
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await db.insert('product_favorites', {
+        'product_id': productId,
+        'created_at': DateTime.now().toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     } else {
       await db.delete(
         'product_favorites',
@@ -1247,14 +1261,10 @@ LIMIT 1
 
   Future<void> touchProductRecent(String productId) async {
     final db = await database;
-    await db.insert(
-      'product_recent',
-      {
-        'product_id': productId,
-        'used_at': DateTime.now().toIso8601String(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('product_recent', {
+      'product_id': productId,
+      'used_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
     await _trimRecentTable('product_recent', 'product_id', keep: 50);
   }
 
@@ -1351,44 +1361,44 @@ LIMIT 1
   }
 
   Map<String, Object?> _productToRow(ProductModel p) => {
-        'id': p.id,
-        'client_id': p.clientId,
-        'erp_name': p.erpName,
-        'erp_modified': p.erpModified,
-        'sync_status': p.syncStatus.name,
-        'last_error': p.lastError,
-        'item_code': p.itemCode,
-        'item_name': p.itemName,
-        'item_name_ar': p.itemNameAr,
-        'item_group': p.itemGroup,
-        'stock_uom': p.stockUom,
-        'sales_uom': p.salesUom,
-        'description': p.description,
-        'brand': p.brand,
-        'barcode': p.barcode,
-        'sku': p.sku,
-        'hs_code': p.hsCode,
-        'selling_rate': p.sellingRate,
-        'purchase_rate': p.purchaseRate,
-        'price_list': p.priceList,
-        'tax_template': p.taxTemplate,
-        'maintain_stock': p.maintainStock ? 1 : 0,
-        'disabled': p.disabled ? 1 : 0,
-        'has_batch': p.hasBatch ? 1 : 0,
-        'has_serial': p.hasSerial ? 1 : 0,
-        'opening_quantity': p.openingQuantity,
-        'opening_warehouse': p.openingWarehouse,
-        'reorder_level': p.reorderLevel,
-        'weight': p.weight,
-        'weight_uom': p.weightUom,
-        'income_account': p.incomeAccount,
-        'expense_account': p.expenseAccount,
-        'cost_center': p.costCenter,
-        'image_path': p.imagePath,
-        'gallery_paths_json': jsonEncode(p.galleryPaths),
-        'created_at': p.createdAt.toIso8601String(),
-        'updated_at': p.updatedAt.toIso8601String(),
-      };
+    'id': p.id,
+    'client_id': p.clientId,
+    'erp_name': p.erpName,
+    'erp_modified': p.erpModified,
+    'sync_status': p.syncStatus.name,
+    'last_error': p.lastError,
+    'item_code': p.itemCode,
+    'item_name': p.itemName,
+    'item_name_ar': p.itemNameAr,
+    'item_group': p.itemGroup,
+    'stock_uom': p.stockUom,
+    'sales_uom': p.salesUom,
+    'description': p.description,
+    'brand': p.brand,
+    'barcode': p.barcode,
+    'sku': p.sku,
+    'hs_code': p.hsCode,
+    'selling_rate': p.sellingRate,
+    'purchase_rate': p.purchaseRate,
+    'price_list': p.priceList,
+    'tax_template': p.taxTemplate,
+    'maintain_stock': p.maintainStock ? 1 : 0,
+    'disabled': p.disabled ? 1 : 0,
+    'has_batch': p.hasBatch ? 1 : 0,
+    'has_serial': p.hasSerial ? 1 : 0,
+    'opening_quantity': p.openingQuantity,
+    'opening_warehouse': p.openingWarehouse,
+    'reorder_level': p.reorderLevel,
+    'weight': p.weight,
+    'weight_uom': p.weightUom,
+    'income_account': p.incomeAccount,
+    'expense_account': p.expenseAccount,
+    'cost_center': p.costCenter,
+    'image_path': p.imagePath,
+    'gallery_paths_json': jsonEncode(p.galleryPaths),
+    'created_at': p.createdAt.toIso8601String(),
+    'updated_at': p.updatedAt.toIso8601String(),
+  };
 
   ProductModel _productFromRow(Map<String, Object?> r) {
     List<String> gallery = const [];
@@ -1403,8 +1413,7 @@ LIMIT 1
       id: '${r['id']}',
       clientId: '${r['client_id']}',
       erpName: r['erp_name'] == null ? null : '${r['erp_name']}',
-      erpModified:
-          r['erp_modified'] == null ? null : '${r['erp_modified']}',
+      erpModified: r['erp_modified'] == null ? null : '${r['erp_modified']}',
       syncStatus: _syncStatusFrom('${r['sync_status']}'),
       lastError: r['last_error'] == null ? null : '${r['last_error']}',
       itemCode: '${r['item_code']}',
@@ -1433,10 +1442,12 @@ LIMIT 1
       reorderLevel: (r['reorder_level'] as num?)?.toDouble(),
       weight: (r['weight'] as num?)?.toDouble(),
       weightUom: r['weight_uom'] == null ? null : '${r['weight_uom']}',
-      incomeAccount:
-          r['income_account'] == null ? null : '${r['income_account']}',
-      expenseAccount:
-          r['expense_account'] == null ? null : '${r['expense_account']}',
+      incomeAccount: r['income_account'] == null
+          ? null
+          : '${r['income_account']}',
+      expenseAccount: r['expense_account'] == null
+          ? null
+          : '${r['expense_account']}',
       costCenter: r['cost_center'] == null ? null : '${r['cost_center']}',
       imagePath: r['image_path'] == null ? null : '${r['image_path']}',
       galleryPaths: gallery,
@@ -1445,7 +1456,10 @@ LIMIT 1
     );
   }
 
-  Future<void> deleteCustomerRow(String id, {DatabaseExecutor? executor}) async {
+  Future<void> deleteCustomerRow(
+    String id, {
+    DatabaseExecutor? executor,
+  }) async {
     final db = executor ?? await database;
     await db.delete('customers', where: 'id = ?', whereArgs: [id]);
   }
@@ -1606,20 +1620,17 @@ LIMIT 1
 
   Future<int> requeueAllFailed() async {
     final db = await database;
-    return db.update(
-      'sync_queue',
-      {'status': 'retry', 'last_error': null},
-      where: "status IN ('failed','conflict')",
-    );
+    return db.update('sync_queue', {
+      'status': 'retry',
+      'last_error': null,
+    }, where: "status IN ('failed','conflict')");
   }
 
   Future<void> requeueInFlightAsQueued() async {
     final db = await database;
-    await db.update(
-      'sync_queue',
-      {'status': 'pending'},
-      where: "status IN ('uploading','in_flight')",
-    );
+    await db.update('sync_queue', {
+      'status': 'pending',
+    }, where: "status IN ('uploading','in_flight')");
   }
 
   Future<void> addSyncLog({
@@ -1649,11 +1660,7 @@ DELETE FROM sync_logs WHERE id NOT IN (
 
   Future<List<Map<String, Object?>>> listSyncLogs({int limit = 100}) async {
     final db = await database;
-    return db.query(
-      'sync_logs',
-      orderBy: 'created_at DESC',
-      limit: limit,
-    );
+    return db.query('sync_logs', orderBy: 'created_at DESC', limit: limit);
   }
 
   Future<List<SyncQueueItem>> listQueueByStatuses(List<String> statuses) async {
@@ -1695,7 +1702,8 @@ DELETE FROM sync_logs WHERE id NOT IN (
       }
       if (status == 'uploading' || status == 'in_flight') {
         out['in_flight'] = (out['in_flight'] ?? 0) + c;
-        out['uploading'] = (out['uploading'] ?? 0) + (status == 'uploading' ? c : 0);
+        out['uploading'] =
+            (out['uploading'] ?? 0) + (status == 'uploading' ? c : 0);
       }
     }
     out['pending'] = (out['pending'] ?? 0) + (out['retry'] ?? 0);
@@ -1804,8 +1812,10 @@ DELETE FROM sync_logs WHERE id NOT IN (
 
   SyncStatus _syncStatusFrom(String raw) {
     return switch (raw) {
-      'pending' || 'queued' || 'awaitingErp' || 'awaiting_erp' =>
-        SyncStatus.pending,
+      'pending' ||
+      'queued' ||
+      'awaitingErp' ||
+      'awaiting_erp' => SyncStatus.pending,
       'uploading' || 'inFlight' || 'in_flight' => SyncStatus.uploading,
       'uploaded' || 'synced' => SyncStatus.uploaded,
       'conflict' => SyncStatus.conflict,

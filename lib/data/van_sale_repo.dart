@@ -78,8 +78,8 @@ class VanSaleRepo {
         );
       }
       await db.metaSet('last_pull_at', DateTime.now().toIso8601String());
-      await db.metaSet('route_name', 'ERPNext · ZG Trip');
-      routeName = 'ERPNext · ZG Trip';
+      await db.metaSet('route_name', 'Van route');
+      routeName = 'Van route';
 
       final warehouse = VanSalePrefs.instance.warehouse.trim();
       if (warehouse.isNotEmpty) {
