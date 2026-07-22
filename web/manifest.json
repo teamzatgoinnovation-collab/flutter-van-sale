@@ -1,6 +1,6 @@
 {
-    "name": "go_van",
-    "short_name": "go_van",
+    "name": "VanSale",
+    "short_name": "VanSale",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

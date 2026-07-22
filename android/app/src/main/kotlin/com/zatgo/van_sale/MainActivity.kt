@@ -1,4 +1,4 @@
-package com.zatgo.go_van
+package com.zatgo.van_sale
 
 import io.flutter.embedding.android.FlutterActivity
 

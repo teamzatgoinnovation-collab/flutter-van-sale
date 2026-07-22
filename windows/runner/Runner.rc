@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.zatgo" "\0"
-            VALUE "FileDescription", "go_van" "\0"
+            VALUE "FileDescription", "VanSale" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "go_van" "\0"
+            VALUE "InternalName", "van_sale" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.zatgo. All rights reserved." "\0"
-            VALUE "OriginalFilename", "go_van.exe" "\0"
-            VALUE "ProductName", "go_van" "\0"
+            VALUE "OriginalFilename", "van_sale.exe" "\0"
+            VALUE "ProductName", "VanSale" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

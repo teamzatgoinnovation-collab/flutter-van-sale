@@ -2,23 +2,23 @@ import 'package:flutter/material.dart';
 
 import 'session.dart';
 
-class GoVanAuthScope extends InheritedWidget {
-  const GoVanAuthScope({
+class VanSaleAuthScope extends InheritedWidget {
+  const VanSaleAuthScope({
     super.key,
     required this.session,
     required this.onSignOut,
     required super.child,
   });
 
-  final GoVanSession session;
+  final VanSaleSession session;
   final Future<void> Function() onSignOut;
 
-  static GoVanAuthScope? maybeOf(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<GoVanAuthScope>();
+  static VanSaleAuthScope? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<VanSaleAuthScope>();
   }
 
   @override
-  bool updateShouldNotify(GoVanAuthScope oldWidget) {
+  bool updateShouldNotify(VanSaleAuthScope oldWidget) {
     return session != oldWidget.session || onSignOut != oldWidget.onSignOut;
   }
 }

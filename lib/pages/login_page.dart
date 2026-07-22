@@ -6,7 +6,7 @@ import '../services/session.dart';
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, required this.session, required this.onAuthed});
 
-  final GoVanSession session;
+  final VanSaleSession session;
   final VoidCallback onAuthed;
 
   @override
@@ -78,6 +78,11 @@ class _LoginPageState extends State<LoginPage>
     );
   }
 
+  void _offline() {
+    widget.session.continueOffline();
+    widget.onAuthed();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -124,7 +129,7 @@ class _LoginPageState extends State<LoginPage>
                             borderRadius: BorderRadius.circular(18),
                           ),
                           child: Icon(
-                            Icons.directions_car_outlined,
+                            Icons.local_shipping_outlined,
                             size: 32,
                             color: scheme.primary,
                           ),
@@ -141,7 +146,7 @@ class _LoginPageState extends State<LoginPage>
                         ),
                       ),
                       Text(
-                        'Go Van',
+                        'VanSale',
                         textAlign: TextAlign.center,
                         style: theme.textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.w800,
@@ -149,7 +154,7 @@ class _LoginPageState extends State<LoginPage>
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Sign in with your ERPNext / Frappe site account.',
+                        'Route sales with SQLite offline and safe sync.',
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: scheme.onSurfaceVariant,
@@ -222,6 +227,11 @@ class _LoginPageState extends State<LoginPage>
                                     : const Text('Sign in'),
                               ),
                               const SizedBox(height: 8),
+                              OutlinedButton(
+                                onPressed: _busy ? null : _offline,
+                                child: const Text('Continue offline'),
+                              ),
+                              const SizedBox(height: 4),
                               TextButton(
                                 onPressed: _busy ? null : _ping,
                                 child: const Text('Test site'),

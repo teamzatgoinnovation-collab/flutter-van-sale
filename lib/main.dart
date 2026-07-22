@@ -1,31 +1,40 @@
 import 'package:flutter/material.dart';
 
-import 'data/mock_repo.dart';
+import 'data/van_sale_db.dart';
+import 'data/van_sale_repo.dart';
 import 'pages/login_page.dart';
 import 'pages/shell.dart';
 import 'services/session.dart';
+import 'services/sync_service.dart';
 import 'theme.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(GoVanApp(session: GoVanSession()));
+  await initVanSaleSqflite();
+  await vanSaleRepo.init();
+  runApp(VanSaleApp(session: VanSaleSession()));
 }
 
-class GoVanApp extends StatefulWidget {
-  const GoVanApp({super.key, required this.session});
+class VanSaleApp extends StatefulWidget {
+  const VanSaleApp({super.key, required this.session});
 
-  final GoVanSession session;
+  final VanSaleSession session;
 
   @override
-  State<GoVanApp> createState() => _GoVanAppState();
+  State<VanSaleApp> createState() => _VanSaleAppState();
 }
 
-class _GoVanAppState extends State<GoVanApp> {
+class _VanSaleAppState extends State<VanSaleApp> {
   bool _showLogin = true;
+  late final SyncService _sync;
+
+  bool get _authed =>
+      widget.session.connected || widget.session.allowMockWithoutLogin;
 
   @override
   void initState() {
     super.initState();
+    _sync = SyncService(widget.session);
     _syncGate();
     widget.session.addListener(_syncGate);
   }
@@ -37,37 +46,46 @@ class _GoVanAppState extends State<GoVanApp> {
   }
 
   void _syncGate() {
-    final authed = widget.session.connected;
+    final authed = _authed;
     if (_showLogin == !authed) {
       if (authed) {
-        mockRepo.refreshFromErpnext(widget.session);
+        _afterAuth();
       }
       return;
     }
     setState(() => _showLogin = !authed);
     if (authed) {
-      mockRepo.refreshFromErpnext(widget.session);
+      _afterAuth();
+    }
+  }
+
+  Future<void> _afterAuth() async {
+    try {
+      await _sync.flush();
+    } catch (e) {
+      debugPrint('VanSale sync after auth: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Go Van',
+      title: 'VanSale',
       debugShowCheckedModeBanner: false,
-      theme: buildGoVanTheme(brightness: Brightness.light),
-      darkTheme: buildGoVanTheme(brightness: Brightness.dark),
+      theme: buildVanSaleTheme(brightness: Brightness.light),
+      darkTheme: buildVanSaleTheme(brightness: Brightness.dark),
       themeMode: ThemeMode.system,
       home: _showLogin
           ? LoginPage(
               session: widget.session,
               onAuthed: () {
                 setState(() => _showLogin = false);
-                mockRepo.refreshFromErpnext(widget.session);
+                _afterAuth();
               },
             )
-          : GoVanShell(
+          : VanSaleShell(
               session: widget.session,
+              sync: _sync,
               onRequireLogin: () => setState(() => _showLogin = true),
             ),
     );

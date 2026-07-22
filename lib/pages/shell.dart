@@ -2,50 +2,85 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_scope.dart';
 import '../services/session.dart';
+import '../services/sync_service.dart';
 import 'collections_page.dart';
 import 'connection_page.dart';
 import 'orders_page.dart';
 import 'stock_page.dart';
 import 'today_page.dart';
-import 'visits_page.dart';
 
-class GoVanShell extends StatefulWidget {
-  const GoVanShell({
+class VanSaleShell extends StatefulWidget {
+  const VanSaleShell({
     super.key,
     required this.session,
+    required this.sync,
     this.onRequireLogin,
   });
 
-  final GoVanSession session;
+  final VanSaleSession session;
+  final SyncService sync;
   final VoidCallback? onRequireLogin;
 
   @override
-  State<GoVanShell> createState() => _GoVanShellState();
+  State<VanSaleShell> createState() => _VanSaleShellState();
 }
 
-class _GoVanShellState extends State<GoVanShell> {
+class _VanSaleShellState extends State<VanSaleShell> {
   int _index = 0;
+  String? _prefillCustomer;
 
   Future<void> _signOut() async {
     await widget.session.logout();
     widget.onRequireLogin?.call();
   }
 
+  void _openSell({String? customer}) {
+    setState(() {
+      _prefillCustomer = customer;
+      _index = 1;
+    });
+  }
+
+  void _openCash({String? customer}) {
+    setState(() {
+      _prefillCustomer = customer;
+      _index = 2;
+    });
+  }
+
+  void _clearPrefill() {
+    if (_prefillCustomer != null) {
+      setState(() => _prefillCustomer = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
-      const TodayPage(),
-      const OrdersPage(),
-      const CollectionsPage(),
-      const VisitsPage(),
-      const StockPage(),
+      TodayPage(
+        sync: widget.sync,
+        onSell: (customer) => _openSell(customer: customer),
+        onCollect: (customer) => _openCash(customer: customer),
+      ),
+      OrdersPage(
+        sync: widget.sync,
+        initialCustomer: _index == 1 ? _prefillCustomer : null,
+        onConsumedPrefill: _clearPrefill,
+      ),
+      CollectionsPage(
+        sync: widget.sync,
+        initialCustomer: _index == 2 ? _prefillCustomer : null,
+        onConsumedPrefill: _clearPrefill,
+      ),
+      StockPage(sync: widget.sync),
       ConnectionPage(
         session: widget.session,
+        sync: widget.sync,
         onSignOut: _signOut,
       ),
     ];
 
-    return GoVanAuthScope(
+    return VanSaleAuthScope(
       session: widget.session,
       onSignOut: _signOut,
       child: Scaffold(
@@ -62,19 +97,14 @@ class _GoVanShellState extends State<GoVanShell> {
               label: 'Today',
             ),
             NavigationDestination(
-              icon: Icon(Icons.receipt_long_outlined),
-              selectedIcon: Icon(Icons.receipt_long),
-              label: 'Orders',
+              icon: Icon(Icons.point_of_sale_outlined),
+              selectedIcon: Icon(Icons.point_of_sale),
+              label: 'Sell',
             ),
             NavigationDestination(
               icon: Icon(Icons.payments_outlined),
               selectedIcon: Icon(Icons.payments),
               label: 'Cash',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.storefront_outlined),
-              selectedIcon: Icon(Icons.storefront),
-              label: 'Visits',
             ),
             NavigationDestination(
               icon: Icon(Icons.inventory_2_outlined),

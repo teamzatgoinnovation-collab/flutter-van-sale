@@ -1,11 +1,65 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:go_van/main.dart';
-import 'package:go_van/services/session.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:van_sale/data/van_sale_db.dart';
+import 'package:van_sale/data/van_sale_repo.dart';
+import 'package:van_sale/models/models.dart';
 
 void main() {
-  testWidgets('shell shows Go Van brand and route', (tester) async {
-    await tester.pumpWidget(GoVanApp(session: GoVanSession()));
-    expect(find.text('Go Van'), findsWidgets);
-    expect(find.textContaining('Riyadh North'), findsOneWidget);
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
+  test('createOrder persists entity + outbox with same client_id', () async {
+    final db = VanSaleDb.instance;
+    // Force fresh DB file for test process
+    final database = await db.database;
+    await database.delete('sync_queue');
+    await database.delete('van_orders');
+    await database.delete('collections');
+    await database.delete('van_stock');
+    await database.delete('route_stops');
+    await database.delete('meta');
+    await db.seedIfNeeded();
+
+    final repo = VanSaleRepo(db);
+    await repo.init();
+
+    final order = await repo.createOrder(
+      customerName: 'City Grocer',
+      lines: const [
+        OrderLine(
+          itemCode: 'SKU-WATER-1.5',
+          itemName: 'Water 1.5L',
+          qty: 2,
+          unitPrice: 2.5,
+        ),
+      ],
+    );
+
+    final orders = await repo.listOrders();
+    expect(orders.length, 1);
+    expect(orders.first.clientId, order.clientId);
+    expect(orders.first.syncStatus, SyncStatus.queued);
+
+    final queue = await db.peekQueue(statuses: const ['queued']);
+    expect(queue.length, greaterThanOrEqualTo(1));
+    final create = queue.firstWhere((q) => q.entityType == 'van_order');
+    expect(create.clientId, order.clientId);
+    expect(create.args['client_id'], order.clientId);
+
+    // Second enqueue for same create is ignored (no duplicate).
+    await db.enqueue(
+      clientId: order.clientId,
+      entityType: 'van_order',
+      entityId: order.id,
+      op: 'create',
+      method: 'zatgo_core.api.v1.go_van.orders.create',
+      args: {'client_id': order.clientId},
+    );
+    final again = await db.peekQueue(statuses: const ['queued']);
+    final creates =
+        again.where((q) => q.entityType == 'van_order' && q.op == 'create');
+    expect(creates.length, 1);
   });
 }

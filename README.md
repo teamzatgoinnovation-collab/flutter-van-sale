@@ -1,14 +1,14 @@
-# Go Van — Flutter client
+# VanSale — Flutter client
 
-**Status:** Runnable scaffold (mock route data + ERPNext password login)  
-**Backend:** `zatgo_core.api.v1.go_van.*` (thin trips list/get)  
+**Status:** Local-first van sales with SQLite + idempotent outbox sync  
+**Backend pull:** `zatgo_core.api.v1.go_van.*` (trips list/get when signed in)  
 **SDK:** [`SharedSDK/dart_sdk`](../../../SharedSDK/dart_sdk/)
 
-Van / route sales client: today’s route, offline orders, collections, customer visits (GPS stubs), and van stock transfers.
+Real-world van / route sales: today’s route, sell from van stock, cash collections, visit check-in, durable offline queue with `client_id` so orders are not duplicated or lost.
 
 ## Auth
 
-Sign in with ERPNext **site URL + email/password** (cookie session via `ErpnextSessionStore`). Use **Continue offline** for mock data. Optional default site:
+Sign in with ERPNext **site URL + email/password**, or **Continue offline** to work against SQLite seed data. Optional default site:
 
 ```bash
 --dart-define=FRAPPE_BASE_URL=https://demo.zatgo.online
@@ -17,7 +17,7 @@ Sign in with ERPNext **site URL + email/password** (cookie session via `ErpnextS
 ## Run
 
 ```bash
-cd Clients/flutter/go_van
+cd Clients/flutter/van_sale
 flutter pub get
 flutter run
 ```
@@ -26,14 +26,17 @@ flutter run
 
 | Tab | Role |
 |-----|------|
-| Today | Route summary, GPS check-in / complete, offline sync flush |
-| Orders | Offline-first van orders (queued → synced mock) |
-| Cash | Collections against route customers |
-| Visits | Visit list with lat/lng stubs |
-| Stock | On-van inventory + transfer adjust |
-| Link | ERPNext session status / sign out |
+| Today | Route, visit actions, sync counts, Sell/Collect shortcuts |
+| Sell | Stock-pick van order → SQLite + outbox (`client_id`) |
+| Cash | Collections with sync badges |
+| Stock | Load / issue on-van inventory |
+| Link | Session / offline status, ping, sign out |
 
-Feature pages stay on mock until Go Van hub APIs deepen beyond trips list/get.
+## Offline + sync
+
+- SQLite is source of truth (`van_sale.db`)
+- Every sale/collection is saved with a stable UUID `client_id` and an outbox row in the same transaction
+- Sync never drops a row without ERP ack; missing write APIs mark **Awaiting ERP** and keep the outbox
 
 ## Dependency
 

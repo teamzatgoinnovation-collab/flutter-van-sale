@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/models.dart';
 import '../services/auth_scope.dart';
 
 class PageScaffold extends StatelessWidget {
@@ -20,7 +21,7 @@ class PageScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final auth = GoVanAuthScope.maybeOf(context);
+    final auth = VanSaleAuthScope.maybeOf(context);
     final mergedActions = <Widget>[
       ...?actions,
       if (auth != null)
@@ -149,4 +150,38 @@ String timeLabel(DateTime? dt) {
   final h = dt.hour.toString().padLeft(2, '0');
   final m = dt.minute.toString().padLeft(2, '0');
   return '$h:$m';
+}
+
+class SyncBadge extends StatelessWidget {
+  const SyncBadge({super.key, required this.status});
+
+  final SyncStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (status) {
+      SyncStatus.synced => ('Synced', const Color(0xFF0F4C5C)),
+      SyncStatus.queued => ('Queued', const Color(0xFFE36414)),
+      SyncStatus.inFlight => ('In flight', Colors.indigo),
+      SyncStatus.awaitingErp => ('ERP pending', Colors.deepOrange),
+      SyncStatus.failed => ('Failed', Colors.red.shade700),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          height: 1.2,
+        ),
+      ),
+    );
+  }
 }

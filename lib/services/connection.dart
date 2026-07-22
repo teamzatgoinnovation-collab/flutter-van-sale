@@ -7,8 +7,8 @@ class ConnectionResult {
   final String message;
 }
 
-/// Ping ERPNext; business APIs stay on mock until `go_van` is deployed.
-Future<ConnectionResult> testConnection(GoVanSession session) async {
+/// Ping ERPNext; commercial docs sync via VanSale outbox + client_id.
+Future<ConnectionResult> testConnection(VanSaleSession session) async {
   final result = await session.ping();
   return ConnectionResult(ok: result.ok, message: result.message);
 }

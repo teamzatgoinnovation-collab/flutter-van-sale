@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = go_van
+PRODUCT_NAME = van_sale
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.zatgo.goVan
+PRODUCT_BUNDLE_IDENTIFIER = com.zatgo.vanSale
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.zatgo. All rights reserved.

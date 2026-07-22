@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
 
-/// ERPNext password-session state for Go Van.
-class GoVanSession extends ChangeNotifier {
-  GoVanSession() {
+/// ERPNext password-session state for VanSale.
+class VanSaleSession extends ChangeNotifier {
+  VanSaleSession() {
     final base = const String.fromEnvironment(
       'FRAPPE_BASE_URL',
       defaultValue: 'https://demo.zatgo.online',

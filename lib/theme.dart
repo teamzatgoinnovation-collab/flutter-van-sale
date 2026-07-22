@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// Field-sales palette: deep teal road / warm sand accents.
-ThemeData buildGoVanTheme({Brightness brightness = Brightness.light}) {
+ThemeData buildVanSaleTheme({Brightness brightness = Brightness.light}) {
   const seed = Color(0xFF0F4C5C);
   final isDark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(

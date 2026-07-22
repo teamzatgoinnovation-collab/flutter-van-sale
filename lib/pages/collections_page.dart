@@ -1,21 +1,75 @@
 import 'package:flutter/material.dart';
 
-import '../data/mock_repo.dart';
+import '../data/van_sale_repo.dart';
+import '../models/models.dart';
+import '../services/sync_service.dart';
 import '../widgets/widgets.dart';
 
 class CollectionsPage extends StatefulWidget {
-  const CollectionsPage({super.key});
+  const CollectionsPage({
+    super.key,
+    required this.sync,
+    this.initialCustomer,
+    this.onConsumedPrefill,
+  });
+
+  final SyncService sync;
+  final String? initialCustomer;
+  final VoidCallback? onConsumedPrefill;
 
   @override
   State<CollectionsPage> createState() => _CollectionsPageState();
 }
 
 class _CollectionsPageState extends State<CollectionsPage> {
-  Future<void> _collect() async {
-    final customer = TextEditingController(text: 'Fresh Basket Co-op');
-    final amount = TextEditingController(text: '750');
+  List<Collection> _rows = const [];
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.initialCustomer != null) {
+        _collect(prefillCustomer: widget.initialCustomer);
+        widget.onConsumedPrefill?.call();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant CollectionsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialCustomer != null &&
+        widget.initialCustomer != oldWidget.initialCustomer) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _collect(prefillCustomer: widget.initialCustomer);
+        widget.onConsumedPrefill?.call();
+      });
+    }
+  }
+
+  Future<void> _load() async {
+    final rows = await vanSaleRepo.listCollections();
+    if (!mounted) return;
+    setState(() => _rows = rows);
+  }
+
+  Future<void> _collect({String? prefillCustomer}) async {
+    if (_saving) return;
+    final stops = await vanSaleRepo.listStops();
+    final customers = <String>{
+      if (prefillCustomer != null && prefillCustomer.trim().isNotEmpty)
+        prefillCustomer.trim(),
+      ...stops.map((s) => s.customerName),
+    }.toList();
+    var customer = customers.isNotEmpty
+        ? customers.first
+        : (prefillCustomer ?? 'Customer');
+    final amount = TextEditingController();
     var method = 'Cash';
 
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -24,9 +78,15 @@ class _CollectionsPageState extends State<CollectionsPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: customer,
-                decoration: const InputDecoration(labelText: 'Customer'),
+              DropdownMenu<String>(
+                initialSelection: customer,
+                label: const Text('Customer'),
+                expandedInsets: EdgeInsets.zero,
+                dropdownMenuEntries: [
+                  for (final c in customers)
+                    DropdownMenuEntry(value: c, label: c),
+                ],
+                onSelected: (v) => setLocal(() => customer = v ?? customer),
               ),
               const SizedBox(height: 10),
               TextField(
@@ -62,31 +122,40 @@ class _CollectionsPageState extends State<CollectionsPage> {
       ),
     );
 
-    if (ok == true) {
-      mockRepo.recordCollection(
-        customerName: customer.text.trim().isEmpty
-            ? 'Customer'
-            : customer.text.trim(),
+    if (ok != true || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      await vanSaleRepo.recordCollection(
+        customerName: customer.trim().isEmpty ? 'Customer' : customer.trim(),
         amount: double.tryParse(amount.text) ?? 0,
         method: method,
       );
-      setState(() {});
+      await widget.sync.flush(pullTrips: false);
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      }
+    } finally {
+      amount.dispose();
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final rows = mockRepo.listCollections();
-    final total = rows.fold<double>(0, (s, c) => s + c.amount);
+    final total = _rows.fold<double>(0, (s, c) => s + c.amount);
     final theme = Theme.of(context);
 
     return PageScaffold(
-      title: 'Collections',
-      subtitle: 'Cash / card take on the route',
+      title: 'Cash',
+      subtitle: 'Collections · safe client_id sync',
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _collect,
+        onPressed: _saving ? null : () => _collect(),
         icon: const Icon(Icons.payments_outlined),
-        label: const Text('Collect'),
+        label: Text(_saving ? 'Saving…' : 'Collect'),
       ),
       child: Column(
         children: [
@@ -109,17 +178,17 @@ class _CollectionsPageState extends State<CollectionsPage> {
             ),
           ),
           Expanded(
-            child: rows.isEmpty
+            child: _rows.isEmpty
                 ? const EmptyHint(
                     'No collections yet',
                     icon: Icons.payments_outlined,
                   )
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
-                    itemCount: rows.length,
+                    itemCount: _rows.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, i) {
-                      final c = rows[i];
+                      final c = _rows[i];
                       return Card(
                         clipBehavior: Clip.antiAlias,
                         child: ListTile(
@@ -132,12 +201,23 @@ class _CollectionsPageState extends State<CollectionsPage> {
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                           subtitle: Text(
-                            '${c.method} · ${timeLabel(c.collectedAt)}'
-                            '${c.synced ? '' : ' · pending sync'}',
+                            '${c.method} · ${timeLabel(c.collectedAt)}\n'
+                            '${c.clientId}',
                           ),
-                          trailing: Text(
-                            money(c.amount),
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          isThreeLine: true,
+                          trailing: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                money(c.amount),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              SyncBadge(status: c.syncStatus),
+                            ],
                           ),
                         ),
                       );

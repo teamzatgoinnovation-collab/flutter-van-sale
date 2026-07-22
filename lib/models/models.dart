@@ -1,4 +1,4 @@
-enum OrderSyncStatus { synced, queued, failed }
+enum SyncStatus { queued, inFlight, awaitingErp, synced, failed }
 
 enum VisitStatus { planned, checkedIn, completed, skipped }
 
@@ -37,51 +37,90 @@ class RouteStop {
   }
 }
 
+class OrderLine {
+  const OrderLine({
+    required this.itemCode,
+    required this.itemName,
+    required this.qty,
+    required this.unitPrice,
+  });
+
+  final String itemCode;
+  final String itemName;
+  final double qty;
+  final double unitPrice;
+
+  double get amount => qty * unitPrice;
+
+  Map<String, dynamic> toJson() => {
+        'item_code': itemCode,
+        'item_name': itemName,
+        'qty': qty,
+        'unit_price': unitPrice,
+        'amount': amount,
+      };
+
+  factory OrderLine.fromJson(Map<String, dynamic> json) {
+    return OrderLine(
+      itemCode: '${json['item_code'] ?? ''}',
+      itemName: '${json['item_name'] ?? ''}',
+      qty: (json['qty'] as num?)?.toDouble() ?? 0,
+      unitPrice: (json['unit_price'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
 class VanOrder {
   const VanOrder({
     required this.id,
+    required this.clientId,
     required this.customerName,
-    required this.itemsLabel,
+    required this.lines,
     required this.amount,
     required this.createdAt,
     required this.syncStatus,
+    this.erpName,
   });
 
   final String id;
+  final String clientId;
   final String customerName;
-  final String itemsLabel;
+  final List<OrderLine> lines;
   final double amount;
   final DateTime createdAt;
-  final OrderSyncStatus syncStatus;
+  final SyncStatus syncStatus;
+  final String? erpName;
 
-  VanOrder copyWith({OrderSyncStatus? syncStatus}) {
-    return VanOrder(
-      id: id,
-      customerName: customerName,
-      itemsLabel: itemsLabel,
-      amount: amount,
-      createdAt: createdAt,
-      syncStatus: syncStatus ?? this.syncStatus,
-    );
+  String get itemsLabel {
+    if (lines.isEmpty) return 'No lines';
+    if (lines.length == 1) {
+      final l = lines.first;
+      return '${l.qty.toStringAsFixed(l.qty % 1 == 0 ? 0 : 1)}× ${l.itemName}';
+    }
+    return '${lines.length} SKUs';
   }
 }
 
 class Collection {
   const Collection({
     required this.id,
+    required this.clientId,
     required this.customerName,
     required this.amount,
     required this.method,
     required this.collectedAt,
-    required this.synced,
+    required this.syncStatus,
+    this.erpName,
   });
 
   final String id;
+  final String clientId;
   final String customerName;
   final double amount;
   final String method;
   final DateTime collectedAt;
-  final bool synced;
+  final SyncStatus syncStatus;
+  final String? erpName;
 }
 
 class StockLine {
@@ -90,12 +129,14 @@ class StockLine {
     required this.itemName,
     required this.qty,
     required this.uom,
+    required this.unitPrice,
   });
 
   final String itemCode;
   final String itemName;
   final double qty;
   final String uom;
+  final double unitPrice;
 
   StockLine copyWith({double? qty}) {
     return StockLine(
@@ -103,6 +144,7 @@ class StockLine {
       itemName: itemName,
       qty: qty ?? this.qty,
       uom: uom,
+      unitPrice: unitPrice,
     );
   }
 }
@@ -114,6 +156,10 @@ class DaySummary {
     required this.ordersQueued,
     required this.collectionsToday,
     required this.vanStockSku,
+    required this.syncQueued,
+    required this.syncInFlight,
+    required this.syncAwaitingErp,
+    required this.syncFailed,
   });
 
   final int stopsTotal;
@@ -121,4 +167,36 @@ class DaySummary {
   final int ordersQueued;
   final double collectionsToday;
   final int vanStockSku;
+  final int syncQueued;
+  final int syncInFlight;
+  final int syncAwaitingErp;
+  final int syncFailed;
+}
+
+class SyncQueueItem {
+  const SyncQueueItem({
+    required this.id,
+    required this.clientId,
+    required this.entityType,
+    required this.entityId,
+    required this.op,
+    required this.method,
+    required this.args,
+    required this.status,
+    required this.attempts,
+    required this.createdAt,
+    this.lastError,
+  });
+
+  final String id;
+  final String clientId;
+  final String entityType;
+  final String entityId;
+  final String op;
+  final String method;
+  final Map<String, dynamic> args;
+  final String status;
+  final int attempts;
+  final DateTime createdAt;
+  final String? lastError;
 }
