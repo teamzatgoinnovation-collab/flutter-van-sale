@@ -1,20 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../customer/models/customer_model.dart';
-import '../customer/pages/customer_form_page.dart';
-import '../customer/pages/customer_search_page.dart';
-import '../customer/repositories/customer_repository.dart';
-import '../data/van_sale_repo.dart';
-import '../models/models.dart';
-import '../product/models/product_model.dart';
-import '../product/pages/product_form_page.dart';
-import '../product/pages/product_search_page.dart';
-import '../product/repositories/product_repository.dart';
 import '../services/auth_scope.dart';
 import '../services/session.dart';
 import '../services/sync_service.dart';
 import '../services/van_sale_policy.dart';
+import '../data/van_sale_repo.dart';
+import '../models/models.dart';
 import '../widgets/widgets.dart';
+import 'sell_order_page.dart';
 
 class OrdersPage extends StatefulWidget {
   const OrdersPage({
@@ -39,7 +32,8 @@ class _OrdersPageState extends State<OrdersPage> {
   List<VanOrder> _orders = const [];
   bool _saving = false;
 
-  VanSaleSession? get _session => VanSaleAuthScope.maybeOf(context)?.session;
+  VanSaleSession get _session =>
+      VanSaleAuthScope.maybeOf(context)?.session ?? widget.sync.session;
 
   @override
   void initState() {
@@ -77,318 +71,23 @@ class _OrdersPageState extends State<OrdersPage> {
     setState(() => _orders = orders);
   }
 
-  Future<CustomerModel?> _pickCustomer({String? initialQuery}) async {
-    final session = _session ?? widget.sync.session;
-    return Navigator.of(context, rootNavigator: true).push<CustomerModel>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => CustomerSearchPage(
-          session: session,
-          sync: widget.sync,
-          selectMode: true,
-          initialQuery: initialQuery,
-        ),
-      ),
-    );
-  }
-
-  Future<String?> _createCustomerDialog() async {
-    final session = _session ?? widget.sync.session;
-    // Offline-first form — works without connectivity.
-    final created = await Navigator.of(context, rootNavigator: true)
-        .push<CustomerModel>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) =>
-            CustomerFormPage(session: session, sync: widget.sync),
-      ),
-    );
-    if (created == null) return null;
-    return created.displayName;
-  }
-
-  Future<StockLine?> _pickProduct() async {
-    final session = _session ?? widget.sync.session;
-    final picked = await Navigator.of(context, rootNavigator: true)
-        .push<ProductModel>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => ProductSearchPage(
-          session: session,
-          sync: widget.sync,
-          selectMode: true,
-        ),
-      ),
-    );
-    if (picked == null) return null;
-    await productRepository.markRecent(picked.id);
-    final existing = await vanSaleRepo.getStock(picked.displayCode) ??
-        await vanSaleRepo.getStock(picked.itemCode);
-    return existing ??
-        StockLine(
-          itemCode: picked.displayCode,
-          itemName: picked.itemName,
-          qty: picked.stockQty,
-          uom: picked.stockUom,
-          unitPrice: picked.displayPrice,
-        );
-  }
-
-  Future<StockLine?> _createProductDialog() async {
-    final session = _session ?? widget.sync.session;
-    final created = await Navigator.of(context, rootNavigator: true)
-        .push<ProductModel>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) =>
-            ProductFormPage(session: session, sync: widget.sync),
-      ),
-    );
-    if (created == null) return null;
-    final line = await vanSaleRepo.getStock(created.displayCode) ??
-        await vanSaleRepo.getStock(created.itemCode);
-    return line ??
-        StockLine(
-          itemCode: created.displayCode,
-          itemName: created.itemName,
-          qty: created.openingQuantity,
-          uom: created.stockUom,
-          unitPrice: created.sellingRate,
-        );
-  }
-
   Future<void> _newOrder({String? prefillCustomer}) async {
     if (_saving) return;
-    var stock = await vanSaleRepo.listStock();
-    if (!mounted) return;
-
-    CustomerModel? selected;
-    var customer = prefillCustomer?.trim() ?? '';
-    if (customer.isNotEmpty) {
-      final hits = await customerRepository.search(query: customer, limit: 8);
-      for (final c in hits.items) {
-        if (c.displayName == customer ||
-            c.customerName == customer ||
-            c.erpName == customer) {
-          selected = c;
-          customer = c.displayName;
-          break;
-        }
-      }
-    }
-    final qtys = <String, double>{for (final s in stock) s.itemCode: 0};
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) {
-          double total = 0;
-          for (final s in stock) {
-            total += (qtys[s.itemCode] ?? 0) * s.unitPrice;
-          }
-          return AlertDialog(
-            title: const Text('Sell from van'),
-            content: SizedBox(
-              width: 420,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Customer',
-                        border: OutlineInputBorder(),
-                      ),
-                      child: Text(
-                        customer.isEmpty ? 'Search customers…' : customer,
-                        style: TextStyle(
-                          color: customer.isEmpty
-                              ? Theme.of(ctx).hintColor
-                              : null,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        FilledButton.tonalIcon(
-                          onPressed: () async {
-                            final picked = await _pickCustomer(
-                              initialQuery: customer,
-                            );
-                            if (picked == null) return;
-                            setLocal(() {
-                              selected = picked;
-                              customer = picked.displayName;
-                            });
-                          },
-                          icon: const Icon(Icons.search, size: 18),
-                          label: const Text('Search'),
-                        ),
-                        TextButton.icon(
-                          onPressed: () async {
-                            final created = await _createCustomerDialog();
-                            if (created == null) return;
-                            setLocal(() {
-                              customer = created;
-                              selected = null;
-                            });
-                          },
-                          icon: const Icon(Icons.person_add_outlined, size: 18),
-                          label: const Text('New'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        FilledButton.tonalIcon(
-                          onPressed: () async {
-                            final line = await _pickProduct();
-                            if (line == null) return;
-                            setLocal(() {
-                              stock = [
-                                ...stock.where(
-                                  (s) => s.itemCode != line.itemCode,
-                                ),
-                                line,
-                              ];
-                              qtys[line.itemCode] =
-                                  (qtys[line.itemCode] ?? 0) > 0
-                                      ? qtys[line.itemCode]!
-                                      : 1;
-                            });
-                          },
-                          icon: const Icon(Icons.search, size: 18),
-                          label: const Text('Search product'),
-                        ),
-                        TextButton.icon(
-                          onPressed: () async {
-                            final line = await _createProductDialog();
-                            if (line == null) return;
-                            setLocal(() {
-                              stock = [
-                                ...stock.where(
-                                  (s) => s.itemCode != line.itemCode,
-                                ),
-                                line,
-                              ];
-                              qtys[line.itemCode] = qtys[line.itemCode] ?? 0;
-                            });
-                          },
-                          icon: const Icon(Icons.add_box_outlined, size: 18),
-                          label: const Text('New'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (stock.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text(
-                          'No van stock yet. Search products, create one, '
-                          'or Sync after setting warehouse.',
-                        ),
-                      )
-                    else
-                      ...stock.map((s) {
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(s.itemName),
-                          subtitle: Text(
-                            '${money(s.qty)} ${s.uom} · ${money(s.unitPrice)} each',
-                          ),
-                          trailing: SizedBox(
-                            width: 72,
-                            child: TextFormField(
-                              initialValue: (qtys[s.itemCode] ?? 0) == 0
-                                  ? ''
-                                  : money(qtys[s.itemCode]!),
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Qty',
-                                isDense: true,
-                              ),
-                              onChanged: (v) => setLocal(() {
-                                qtys[s.itemCode] = double.tryParse(v) ?? 0;
-                              }),
-                            ),
-                          ),
-                        );
-                      }),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        'Total ${money(total)}',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Queue sale'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    if (ok != true || !mounted) return;
-
-    final lines = <OrderLine>[];
-    for (final s in stock) {
-      final q = qtys[s.itemCode] ?? 0;
-      if (q <= 0) continue;
-      lines.add(
-        OrderLine(
-          itemCode: s.itemCode,
-          itemName: s.itemName,
-          qty: q,
-          unitPrice: s.unitPrice,
-        ),
-      );
-    }
-    if (customer.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pick or create a customer')),
-      );
-      return;
-    }
-    if (lines.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Pick at least one qty')));
-      return;
-    }
-
     setState(() => _saving = true);
     try {
-      if (selected != null) {
-        await customerRepository.markRecent(selected!.id);
-      }
-      await vanSaleRepo.createOrder(
-        customerName: customer.trim(),
-        lines: lines,
-        session: widget.sync.session,
+      final ok = await Navigator.of(context, rootNavigator: true).push<bool>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => SellOrderPage(
+            session: _session,
+            sync: widget.sync,
+            initialCustomer: prefillCustomer,
+          ),
+        ),
       );
-      if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
-        await widget.sync.flush(pullTrips: false);
-      }
-      await _load();
-      if (mounted) {
+      if (ok == true && mounted) {
+        await _load();
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -399,32 +98,37 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
         );
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
-      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
+  String _whenLabel(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(dt.year, dt.month, dt.day);
+    final t = timeLabel(dt);
+    if (day == today) return 'Today · $t';
+    final yesterday = today.subtract(const Duration(days: 1));
+    if (day == yesterday) return 'Yesterday · $t';
+    return '${dt.day}/${dt.month} · $t';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return PageScaffold(
       title: 'Sell',
-      subtitle: 'Sales Invoice · create customer / product',
+      subtitle: 'Queue sales · sync as Sales Invoice',
       onOpenMenu: widget.onOpenMenu,
-      // IndexedStack keeps Sell+Cash FABs mounted; disable heroes so route
-      // pushes from the Sell dialog cannot collide.
       floatingActionButton: HeroMode(
         enabled: false,
         child: FloatingActionButton.extended(
           heroTag: 'van_sale_sell_fab',
           onPressed: _saving ? null : () => _newOrder(),
-          icon: const Icon(Icons.add),
-          label: Text(_saving ? 'Saving…' : 'Sell'),
+          icon: Icon(_saving ? Icons.hourglass_top : Icons.point_of_sale),
+          label: Text(_saving ? 'Opening…' : 'New sale'),
         ),
       ),
       child: Column(
@@ -435,15 +139,15 @@ class _OrdersPageState extends State<OrdersPage> {
               controller: _query,
               onChanged: (_) => _load(),
               decoration: const InputDecoration(
-                hintText: 'Filter orders…',
+                hintText: 'Filter by customer…',
                 prefixIcon: Icon(Icons.search),
               ),
             ),
           ),
           Expanded(
             child: _orders.isEmpty
-                ? const EmptyHint(
-                    'No sales yet',
+                ? EmptyHint(
+                    'No sales yet — tap New sale',
                     icon: Icons.point_of_sale_outlined,
                   )
                 : ListView.separated(
@@ -454,29 +158,61 @@ class _OrdersPageState extends State<OrdersPage> {
                       final o = _orders[i];
                       return Card(
                         clipBehavior: Clip.antiAlias,
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 6,
-                          ),
-                          title: Text(
-                            o.customerName,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          subtitle: Text('${o.itemsLabel}\n${o.clientId}'),
-                          isThreeLine: true,
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                money(o.amount),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      o.customerName,
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      o.itemsLabel,
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                        color: theme
+                                            .colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _whenLabel(o.createdAt),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                        color: theme
+                                            .colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              SyncBadge(status: o.syncStatus),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    money(o.amount),
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  SyncBadge(status: o.syncStatus),
+                                ],
+                              ),
                             ],
                           ),
                         ),
