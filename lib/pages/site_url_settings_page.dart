@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/prefs.dart';
 import '../services/session.dart';
 
-/// Login-time (and optional) site URL editor — connection URL only.
+/// Login-time site URL editor — connection URL only.
 class SiteUrlSettingsPage extends StatefulWidget {
   const SiteUrlSettingsPage({super.key, required this.session});
 
@@ -48,20 +48,6 @@ class _SiteUrlSettingsPageState extends State<SiteUrlSettingsPage> {
     Navigator.of(context).pop(true);
   }
 
-  Future<void> _ping() async {
-    setState(() => _busy = true);
-    final next = _url.text.trim().replaceAll(RegExp(r'/$'), '');
-    if (next.isNotEmpty) {
-      widget.session.updateBaseUrl(next);
-    }
-    final result = await widget.session.ping();
-    if (!mounted) return;
-    setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.message)),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -102,12 +88,6 @@ class _SiteUrlSettingsPageState extends State<SiteUrlSettingsPage> {
             autocorrect: false,
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _busy ? null : _save(),
-          ),
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _ping,
-            icon: const Icon(Icons.wifi_tethering),
-            label: const Text('Test site'),
           ),
           const SizedBox(height: 24),
           FilledButton(
