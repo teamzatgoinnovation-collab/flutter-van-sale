@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/models.dart';
 import '../customer/models/customer_model.dart';
+import '../product/models/product_model.dart';
 
 const _uuid = Uuid();
 
@@ -45,11 +46,13 @@ class VanSaleDb {
     final path = p.join(dir, 'van_sale.db');
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await _createV1(db);
         await _createCustomersTable(db);
         await _createCustomerIndexes(db);
+        await _createProductsTable(db);
+        await _createProductIndexes(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -59,6 +62,10 @@ class VanSaleDb {
             'CREATE INDEX IF NOT EXISTS idx_sync_queue_status_created '
             'ON sync_queue(status, created_at)',
           );
+        }
+        if (oldVersion < 3) {
+          await _createProductsTable(db);
+          await _createProductIndexes(db);
         }
       },
     );
@@ -188,7 +195,6 @@ CREATE TABLE IF NOT EXISTS customers (
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(customer_name)',
     );
-    // Partial uniqueness is enforced in repository (empty duplicates allowed).
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_customers_mobile ON customers(mobile_no)',
     );
@@ -197,6 +203,57 @@ CREATE TABLE IF NOT EXISTS customers (
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_customers_cr ON customers(cr_number)',
+    );
+  }
+
+  Future<void> _createProductsTable(DatabaseExecutor db) async {
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS products (
+  id TEXT PRIMARY KEY NOT NULL,
+  client_id TEXT NOT NULL UNIQUE,
+  erp_name TEXT,
+  sync_status TEXT NOT NULL,
+  last_error TEXT,
+  item_code TEXT NOT NULL UNIQUE,
+  item_name TEXT NOT NULL,
+  item_name_ar TEXT,
+  item_group TEXT NOT NULL,
+  stock_uom TEXT NOT NULL,
+  sales_uom TEXT,
+  description TEXT,
+  brand TEXT,
+  barcode TEXT,
+  sku TEXT,
+  hs_code TEXT,
+  selling_rate REAL NOT NULL DEFAULT 0,
+  purchase_rate REAL NOT NULL DEFAULT 0,
+  price_list TEXT,
+  tax_template TEXT,
+  maintain_stock INTEGER NOT NULL DEFAULT 1,
+  disabled INTEGER NOT NULL DEFAULT 0,
+  has_batch INTEGER NOT NULL DEFAULT 0,
+  has_serial INTEGER NOT NULL DEFAULT 0,
+  opening_quantity REAL NOT NULL DEFAULT 0,
+  opening_warehouse TEXT,
+  reorder_level REAL,
+  weight REAL,
+  weight_uom TEXT,
+  income_account TEXT,
+  expense_account TEXT,
+  cost_center TEXT,
+  image_path TEXT,
+  gallery_paths_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)''');
+  }
+
+  Future<void> _createProductIndexes(DatabaseExecutor db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_sync ON products(sync_status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)',
     );
   }
 
@@ -341,8 +398,11 @@ CREATE TABLE IF NOT EXISTS customers (
     });
   }
 
-  Future<void> upsertStockLine(StockLine line) async {
-    final db = await database;
+  Future<void> upsertStockLine(
+    StockLine line, {
+    DatabaseExecutor? executor,
+  }) async {
+    final db = executor ?? await database;
     final now = DateTime.now().toIso8601String();
     await db.insert('van_stock', {
       'item_code': line.itemCode,
@@ -658,6 +718,203 @@ CREATE TABLE IF NOT EXISTS customers (
     );
   }
 
+  // --- products ---
+
+  Future<void> upsertProduct(ProductModel p, {DatabaseExecutor? executor}) async {
+    final db = executor ?? await database;
+    await db.insert(
+      'products',
+      _productToRow(p),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<ProductModel?> getProduct(String id) async {
+    final db = await database;
+    final rows =
+        await db.query('products', where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty) return null;
+    return _productFromRow(rows.first);
+  }
+
+  Future<ProductModel?> getProductByCode(String itemCode) async {
+    final db = await database;
+    final rows = await db.query(
+      'products',
+      where: 'item_code = ?',
+      whereArgs: [itemCode],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return _productFromRow(rows.first);
+  }
+
+  Future<List<ProductModel>> listProducts({String? query}) async {
+    final db = await database;
+    final rows = await db.query(
+      'products',
+      where: 'disabled = 0',
+      orderBy: 'item_name COLLATE NOCASE ASC',
+    );
+    final all = rows.map(_productFromRow).toList();
+    final q = query?.trim().toLowerCase() ?? '';
+    if (q.isEmpty) return all;
+    return all
+        .where(
+          (p) =>
+              p.itemCode.toLowerCase().contains(q) ||
+              p.itemName.toLowerCase().contains(q) ||
+              (p.barcode ?? '').toLowerCase().contains(q) ||
+              (p.sku ?? '').toLowerCase().contains(q),
+        )
+        .toList(growable: false);
+  }
+
+  Future<ProductModel?> findProductDuplicate({
+    String? itemCode,
+    String? barcode,
+    String? excludeId,
+  }) async {
+    final db = await database;
+    if (itemCode != null && itemCode.trim().isNotEmpty) {
+      final rows = await db.query(
+        'products',
+        where: excludeId == null
+            ? 'item_code = ?'
+            : 'item_code = ? AND id != ?',
+        whereArgs: excludeId == null
+            ? [itemCode.trim()]
+            : [itemCode.trim(), excludeId],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) return _productFromRow(rows.first);
+    }
+    if (barcode != null && barcode.trim().isNotEmpty) {
+      final rows = await db.query(
+        'products',
+        where: excludeId == null ? 'barcode = ?' : 'barcode = ? AND id != ?',
+        whereArgs: excludeId == null
+            ? [barcode.trim()]
+            : [barcode.trim(), excludeId],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) return _productFromRow(rows.first);
+    }
+    return null;
+  }
+
+  Future<void> setProductSync({
+    required String id,
+    required SyncStatus status,
+    String? erpName,
+    String? lastError,
+  }) async {
+    final db = await database;
+    await db.update(
+      'products',
+      {
+        'sync_status': status.name,
+        if (erpName != null) 'erp_name': erpName,
+        'last_error': lastError,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Map<String, Object?> _productToRow(ProductModel p) => {
+        'id': p.id,
+        'client_id': p.clientId,
+        'erp_name': p.erpName,
+        'sync_status': p.syncStatus.name,
+        'last_error': p.lastError,
+        'item_code': p.itemCode,
+        'item_name': p.itemName,
+        'item_name_ar': p.itemNameAr,
+        'item_group': p.itemGroup,
+        'stock_uom': p.stockUom,
+        'sales_uom': p.salesUom,
+        'description': p.description,
+        'brand': p.brand,
+        'barcode': p.barcode,
+        'sku': p.sku,
+        'hs_code': p.hsCode,
+        'selling_rate': p.sellingRate,
+        'purchase_rate': p.purchaseRate,
+        'price_list': p.priceList,
+        'tax_template': p.taxTemplate,
+        'maintain_stock': p.maintainStock ? 1 : 0,
+        'disabled': p.disabled ? 1 : 0,
+        'has_batch': p.hasBatch ? 1 : 0,
+        'has_serial': p.hasSerial ? 1 : 0,
+        'opening_quantity': p.openingQuantity,
+        'opening_warehouse': p.openingWarehouse,
+        'reorder_level': p.reorderLevel,
+        'weight': p.weight,
+        'weight_uom': p.weightUom,
+        'income_account': p.incomeAccount,
+        'expense_account': p.expenseAccount,
+        'cost_center': p.costCenter,
+        'image_path': p.imagePath,
+        'gallery_paths_json': jsonEncode(p.galleryPaths),
+        'created_at': p.createdAt.toIso8601String(),
+        'updated_at': p.updatedAt.toIso8601String(),
+      };
+
+  ProductModel _productFromRow(Map<String, Object?> r) {
+    List<String> gallery = const [];
+    final raw = r['gallery_paths_json'];
+    if (raw != null) {
+      final decoded = jsonDecode('$raw');
+      if (decoded is List) {
+        gallery = decoded.map((e) => '$e').toList(growable: false);
+      }
+    }
+    return ProductModel(
+      id: '${r['id']}',
+      clientId: '${r['client_id']}',
+      erpName: r['erp_name'] == null ? null : '${r['erp_name']}',
+      syncStatus: _syncStatusFrom('${r['sync_status']}'),
+      lastError: r['last_error'] == null ? null : '${r['last_error']}',
+      itemCode: '${r['item_code']}',
+      itemName: '${r['item_name']}',
+      itemNameAr: r['item_name_ar'] == null ? null : '${r['item_name_ar']}',
+      itemGroup: '${r['item_group']}',
+      stockUom: '${r['stock_uom']}',
+      salesUom: r['sales_uom'] == null ? null : '${r['sales_uom']}',
+      description: r['description'] == null ? null : '${r['description']}',
+      brand: r['brand'] == null ? null : '${r['brand']}',
+      barcode: r['barcode'] == null ? null : '${r['barcode']}',
+      sku: r['sku'] == null ? null : '${r['sku']}',
+      hsCode: r['hs_code'] == null ? null : '${r['hs_code']}',
+      sellingRate: (r['selling_rate'] as num?)?.toDouble() ?? 0,
+      purchaseRate: (r['purchase_rate'] as num?)?.toDouble() ?? 0,
+      priceList: r['price_list'] == null ? null : '${r['price_list']}',
+      taxTemplate: r['tax_template'] == null ? null : '${r['tax_template']}',
+      maintainStock: (r['maintain_stock'] as num?)?.toInt() != 0,
+      disabled: (r['disabled'] as num?)?.toInt() == 1,
+      hasBatch: (r['has_batch'] as num?)?.toInt() == 1,
+      hasSerial: (r['has_serial'] as num?)?.toInt() == 1,
+      openingQuantity: (r['opening_quantity'] as num?)?.toDouble() ?? 0,
+      openingWarehouse: r['opening_warehouse'] == null
+          ? null
+          : '${r['opening_warehouse']}',
+      reorderLevel: (r['reorder_level'] as num?)?.toDouble(),
+      weight: (r['weight'] as num?)?.toDouble(),
+      weightUom: r['weight_uom'] == null ? null : '${r['weight_uom']}',
+      incomeAccount:
+          r['income_account'] == null ? null : '${r['income_account']}',
+      expenseAccount:
+          r['expense_account'] == null ? null : '${r['expense_account']}',
+      costCenter: r['cost_center'] == null ? null : '${r['cost_center']}',
+      imagePath: r['image_path'] == null ? null : '${r['image_path']}',
+      galleryPaths: gallery,
+      createdAt: DateTime.tryParse('${r['created_at']}') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse('${r['updated_at']}') ?? DateTime.now(),
+    );
+  }
+
   // --- sync queue ---
 
   Future<void> enqueue({
@@ -709,7 +966,10 @@ CREATE TABLE IF NOT EXISTS customers (
       final rows = await txn.rawQuery('''
 SELECT * FROM sync_queue
 WHERE status = 'queued'
-ORDER BY CASE entity_type WHEN 'customer' THEN 0 ELSE 1 END, created_at ASC
+ORDER BY CASE entity_type
+  WHEN 'customer' THEN 0
+  WHEN 'product' THEN 1
+  ELSE 2 END, created_at ASC
 LIMIT 1
 ''');
       if (rows.isEmpty) return null;

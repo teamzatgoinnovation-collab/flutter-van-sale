@@ -2,23 +2,27 @@ import '../customer/repositories/customer_repository.dart';
 import '../data/van_sale_db.dart';
 import '../data/van_sale_repo.dart';
 import '../models/models.dart';
+import '../product/repositories/product_repository.dart';
 import 'session.dart';
 
-/// Idempotent outbox flush + ERP pull (customers flush before sales).
+/// Idempotent outbox flush + ERP pull (customer → product → sales).
 class SyncService {
   SyncService(
     this.session, {
     VanSaleDb? db,
     VanSaleRepo? repo,
     CustomerRepository? customers,
+    ProductRepository? products,
   }) : db = db ?? VanSaleDb.instance,
        repo = repo ?? vanSaleRepo,
-       customers = customers ?? customerRepository;
+       customers = customers ?? customerRepository,
+       products = products ?? productRepository;
 
   final VanSaleSession session;
   final VanSaleDb db;
   final VanSaleRepo repo;
   final CustomerRepository customers;
+  final ProductRepository products;
 
   Future<SyncFlushResult> flush({bool pullTrips = true}) async {
     if (!session.connected) {
@@ -26,6 +30,7 @@ class SyncService {
     }
 
     await customers.loadDefaults(session);
+    await products.loadDefaults(session);
     await db.requeueInFlightAsQueued();
 
     var processed = 0;
@@ -58,6 +63,7 @@ class SyncService {
 
     if (pullTrips) {
       await repo.refreshFromErpnext(session);
+      await products.refreshFromErp(session);
     }
 
     return SyncFlushResult(
@@ -72,6 +78,11 @@ class SyncService {
         item.method == CustomerApiMethods.sync) {
       final localId = '${item.args['local_id'] ?? item.entityId}';
       return customers.buildSyncArgs(localId);
+    }
+    if (item.entityType == 'product' &&
+        item.method == ProductApiMethods.sync) {
+      final localId = '${item.args['local_id'] ?? item.entityId}';
+      return products.buildSyncArgs(localId);
     }
     return item.args;
   }
@@ -100,6 +111,12 @@ class SyncService {
           status: SyncStatus.synced,
           erpName: erpName,
         );
+      case 'product':
+        await db.setProductSync(
+          id: item.entityId,
+          status: SyncStatus.synced,
+          erpName: erpName,
+        );
       default:
         break;
     }
@@ -120,6 +137,12 @@ class SyncService {
           status: SyncStatus.failed,
           lastError: error,
         );
+      case 'product':
+        await db.setProductSync(
+          id: item.entityId,
+          status: SyncStatus.failed,
+          lastError: error,
+        );
       default:
         break;
     }
@@ -128,6 +151,9 @@ class SyncService {
   String? _extractErpName(SyncQueueItem item, Object? data) {
     if (item.entityType == 'customer') {
       return customers.extractErpName(data);
+    }
+    if (item.entityType == 'product') {
+      return products.extractErpName(data);
     }
     if (data is Map) {
       final name = data['erp_name'] ?? data['name'] ?? data['id'];

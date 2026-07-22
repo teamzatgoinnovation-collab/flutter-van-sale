@@ -5,6 +5,8 @@ import '../customer/pages/customer_form_page.dart';
 import '../customer/repositories/customer_repository.dart';
 import '../data/van_sale_repo.dart';
 import '../models/models.dart';
+import '../product/models/product_model.dart';
+import '../product/pages/product_form_page.dart';
 import '../services/auth_scope.dart';
 import '../services/session.dart';
 import '../services/sync_service.dart';
@@ -92,99 +94,29 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Future<StockLine?> _createProductDialog() async {
     final session = _session;
-    if (session == null || !session.connected) {
+    if (session == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sign in to create a product')),
+        const SnackBar(content: Text('Session unavailable')),
       );
       return null;
     }
-    final code = TextEditingController();
-    final label = TextEditingController();
-    final rate = TextEditingController(text: '0');
-    final qty = TextEditingController(text: '0');
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('New product'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: code,
-                decoration: const InputDecoration(labelText: 'Item code'),
-                autofocus: true,
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: label,
-                decoration: const InputDecoration(labelText: 'Item name'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: rate,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Unit price'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: qty,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Load onto van (qty)',
-                  helperText: 'Requires van warehouse in Settings',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Create'),
-          ),
-        ],
+    final created = await Navigator.of(context).push<ProductModel>(
+      MaterialPageRoute(
+        builder: (_) =>
+            ProductFormPage(session: session, sync: widget.sync),
       ),
     );
-    if (ok != true || !mounted) {
-      code.dispose();
-      label.dispose();
-      rate.dispose();
-      qty.dispose();
-      return null;
-    }
-    try {
-      final line = await vanSaleRepo.createProduct(
-        session: session,
-        itemCode: code.text,
-        itemName: label.text,
-        unitPrice: double.tryParse(rate.text) ?? 0,
-        loadQty: double.tryParse(qty.text) ?? 0,
-      );
-      await widget.sync.flush(pullTrips: false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Product created: ${line.itemCode}')),
+    if (created == null) return null;
+    final line = await vanSaleRepo.getStock(created.displayCode) ??
+        await vanSaleRepo.getStock(created.itemCode);
+    return line ??
+        StockLine(
+          itemCode: created.displayCode,
+          itemName: created.itemName,
+          qty: created.openingQuantity,
+          uom: created.stockUom,
+          unitPrice: created.sellingRate,
         );
-      }
-      return line;
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
-      }
-      return null;
-    } finally {
-      code.dispose();
-      label.dispose();
-      rate.dispose();
-      qty.dispose();
-    }
   }
 
   Future<void> _newOrder({String? prefillCustomer}) async {

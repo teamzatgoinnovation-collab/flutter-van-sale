@@ -37,4 +37,6 @@ flutter run
 - Flush requires ERP ack (`erp_name`) before dropping outbox rows
 - **Customers** are offline-first: local SQLite → `accounting.customers.sync`
   creates Customer + Contact + Address + attachments (idempotent `zatgo_client_id`)
-- Customer outbox flushes **before** sales/collections so names resolve in ERPNext
+- **Products** are normally pulled from ERPNext Item; optional offline create →
+  `warehouse.items.sync` (Item + barcode/price/opening stock/images)
+- Customer/product outbox flushes **before** sales/collections so names resolve in ERPNext
