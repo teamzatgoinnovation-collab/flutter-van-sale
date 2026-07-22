@@ -105,11 +105,13 @@ class SyncService extends ChangeNotifier {
       return lastResult ?? const SyncFlushResult();
     }
 
+    final quietPull = mode == SyncMode.background;
     _running = true;
     progressCurrent = 0;
     progressTotal = 0;
-    progressLabel = mode == SyncMode.background ? 'Background sync…' : 'Syncing…';
-    notifyListeners();
+    // Background: no banner for catalog pull; only show when uploading.
+    progressLabel = quietPull ? '' : 'Syncing…';
+    if (!quietPull) notifyListeners();
 
     await db.addSyncLog(
       level: 'info',
@@ -126,8 +128,12 @@ class SyncService extends ChangeNotifier {
         'retry',
         'queued',
       ]);
-      progressTotal = pending.length + (pullTrips ? 1 : 0);
-      notifyListeners();
+      final showUi = !quietPull || pending.isNotEmpty;
+      progressTotal = pending.length + (pullTrips && !quietPull ? 1 : 0);
+      if (showUi && pending.isNotEmpty) {
+        if (quietPull) progressLabel = 'Background sync…';
+        notifyListeners();
+      }
 
       var uploaded = 0;
       var failed = 0;
@@ -142,7 +148,6 @@ class SyncService extends ChangeNotifier {
             .where((e) => e.entityType != 'customer' && e.entityType != 'product')
             .toList();
 
-        // Batch customers/products (chunked)
         for (var i = 0; i < master.length; i += 20) {
           final chunk = master.sublist(i, (i + 20).clamp(0, master.length));
           final batchResult = await _flushBatch(chunk);
@@ -150,45 +155,51 @@ class SyncService extends ChangeNotifier {
           failed += batchResult.failed;
           conflicts += batchResult.conflicts;
           progressCurrent = (progressCurrent + chunk.length).clamp(0, progressTotal);
-          progressLabel = 'Batch ${progressCurrent}/$progressTotal';
-          notifyListeners();
+          if (showUi) {
+            progressLabel = 'Batch ${progressCurrent}/$progressTotal';
+            notifyListeners();
+          }
         }
 
-        // Sequential for sales/stock/visits (go_van)
         for (final item in other) {
-          progressLabel = '${item.entityType} ${item.op}';
-          notifyListeners();
+          if (showUi) {
+            progressLabel = '${item.entityType} ${item.op}';
+            notifyListeners();
+          }
           final ok = await _flushOne(item, continueOnFailure: continueOnFailure == 1);
           if (ok == _FlushOutcome.uploaded) uploaded++;
           if (ok == _FlushOutcome.failed) failed++;
           if (ok == _FlushOutcome.conflict) conflicts++;
           progressCurrent++;
-          notifyListeners();
+          if (showUi) notifyListeners();
           if (ok == _FlushOutcome.failed && continueOnFailure != 1) break;
         }
       } else {
         while (true) {
           final item = await db.claimNext();
           if (item == null) break;
-          progressLabel = '${item.entityType} ${item.op}';
-          notifyListeners();
+          if (showUi) {
+            progressLabel = '${item.entityType} ${item.op}';
+            notifyListeners();
+          }
           final ok = await _flushOne(item, continueOnFailure: true);
           if (ok == _FlushOutcome.uploaded) uploaded++;
           if (ok == _FlushOutcome.failed) failed++;
           if (ok == _FlushOutcome.conflict) conflicts++;
           progressCurrent++;
-          notifyListeners();
+          if (showUi) notifyListeners();
         }
       }
 
       if (pullTrips) {
-        progressLabel = 'Pulling catalog…';
-        notifyListeners();
+        // Catalog / trips pull is always silent — no banner label.
         await repo.refreshFromErpnext(session);
         await products.refreshFromErp(session);
         await customers.refreshFromErp(session);
-        progressCurrent = progressTotal;
-        notifyListeners();
+        if (!quietPull) {
+          progressCurrent = progressTotal;
+          notifyListeners();
+        }
       }
 
       final result = SyncFlushResult(

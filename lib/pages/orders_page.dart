@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_scope.dart';
 import '../services/session.dart';
 import '../services/sync_service.dart';
+import '../services/van_sale_invoice_service.dart';
 import '../services/van_sale_policy.dart';
 import '../data/van_sale_repo.dart';
 import '../models/models.dart';
@@ -88,19 +89,57 @@ class _OrdersPageState extends State<OrdersPage> {
       if (ok == true && mounted) {
         await _load();
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              VanSalePolicy.instance.shouldAttemptFlushAfterWrite
-                  ? 'Sale saved · sync queued'
-                  : 'Sale saved locally',
+        final latest = _orders.isEmpty ? null : _orders.first;
+        final erpName = latest?.erpName;
+        final messenger = ScaffoldMessenger.of(context);
+        if (erpName != null &&
+            erpName.isNotEmpty &&
+            latest?.syncStatus == SyncStatus.uploaded) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Invoiced · $erpName'),
+              action: SnackBarAction(
+                label: 'Invoice',
+                onPressed: () {
+                  VanSaleInvoiceService.showActions(
+                    context,
+                    session: _session,
+                    erpName: erpName,
+                  );
+                },
+              ),
             ),
-          ),
-        );
+          );
+        } else {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                VanSalePolicy.instance.shouldAttemptFlushAfterWrite
+                    ? 'Sale saved · sync queued'
+                    : 'Sale saved locally',
+              ),
+            ),
+          );
+        }
       }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _openInvoice(VanOrder order) async {
+    final erp = order.erpName;
+    if (erp == null || erp.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invoice syncs after upload')),
+      );
+      return;
+    }
+    await VanSaleInvoiceService.showActions(
+      context,
+      session: _session,
+      erpName: erp,
+    );
   }
 
   String _whenLabel(DateTime dt) {
@@ -156,64 +195,88 @@ class _OrdersPageState extends State<OrdersPage> {
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, i) {
                       final o = _orders[i];
+                      final canPrint =
+                          (o.erpName ?? '').isNotEmpty &&
+                          o.syncStatus == SyncStatus.uploaded;
                       return Card(
                         clipBehavior: Clip.antiAlias,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                        child: InkWell(
+                          onLongPress: canPrint ? () => _openInvoice(o) : null,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        o.customerName,
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        o.itemsLabel,
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(
+                                          color: theme
+                                              .colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        _whenLabel(o.createdAt),
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                          color: theme
+                                              .colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                      if ((o.erpName ?? '').isNotEmpty)
+                                        Text(
+                                          o.erpName!,
+                                          style: theme.textTheme.labelSmall
+                                              ?.copyWith(
+                                            color: theme
+                                                .colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     Text(
-                                      o.customerName,
+                                      money(o.amount),
                                       style: theme.textTheme.titleMedium
                                           ?.copyWith(
-                                        fontWeight: FontWeight.w700,
+                                        fontWeight: FontWeight.w800,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      o.itemsLabel,
-                                      style: theme.textTheme.bodyMedium
-                                          ?.copyWith(
-                                        color: theme
-                                            .colorScheme.onSurfaceVariant,
+                                    const SizedBox(height: 8),
+                                    SyncBadge(status: o.syncStatus),
+                                    if (canPrint)
+                                      IconButton(
+                                        tooltip: 'Tax invoice',
+                                        onPressed: () => _openInvoice(o),
+                                        icon: const Icon(
+                                          Icons.picture_as_pdf_outlined,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      _whenLabel(o.createdAt),
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                        color: theme
-                                            .colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
                                   ],
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    money(o.amount),
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                      fontFeatures: const [
-                                        FontFeature.tabularFigures(),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  SyncBadge(status: o.syncStatus),
-                                ],
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       );

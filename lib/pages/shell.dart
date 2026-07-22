@@ -259,7 +259,7 @@ class _VanSaleShellState extends State<VanSaleShell> {
         ),
         body: Column(
           children: [
-            if (sync.isRunning)
+            if (sync.isRunning && sync.progressLabel.isNotEmpty)
               Material(
                 color: Theme.of(context).colorScheme.secondaryContainer,
                 child: SafeArea(
@@ -270,9 +270,7 @@ class _VanSaleShellState extends State<VanSaleShell> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          sync.progressLabel.isEmpty
-                              ? 'Syncing…'
-                              : sync.progressLabel,
+                          sync.progressLabel,
                           style: Theme.of(context).textTheme.labelLarge,
                         ),
                         const SizedBox(height: 6),
