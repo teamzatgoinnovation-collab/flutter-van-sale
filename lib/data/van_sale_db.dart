@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart' show databaseFactoryFfi, sqfliteFfiInit;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart'
+    show databaseFactoryFfi, sqfliteFfiInit;
 import 'package:uuid/uuid.dart';
 
 import '../models/models.dart';
@@ -123,11 +124,10 @@ CREATE TABLE meta (
 
   Future<void> metaSet(String key, String value) async {
     final db = await database;
-    await db.insert(
-      'meta',
-      {'key': key, 'value': value},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('meta', {
+      'key': key,
+      'value': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<bool> isSeeded() async => (await metaGet('seeded')) == '1';
@@ -148,21 +148,17 @@ CREATE TABLE meta (
   Future<void> upsertStop(RouteStop stop, {DatabaseExecutor? executor}) async {
     final db = executor ?? await database;
     final now = DateTime.now().toIso8601String();
-    await db.insert(
-      'route_stops',
-      {
-        'id': stop.id,
-        'customer_name': stop.customerName,
-        'address': stop.address,
-        'sequence': stop.sequence,
-        'lat': stop.lat,
-        'lng': stop.lng,
-        'visit_status': stop.visitStatus.name,
-        'planned_at': stop.plannedAt?.toIso8601String(),
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('route_stops', {
+      'id': stop.id,
+      'customer_name': stop.customerName,
+      'address': stop.address,
+      'sequence': stop.sequence,
+      'lat': stop.lat,
+      'lng': stop.lng,
+      'visit_status': stop.visitStatus.name,
+      'planned_at': stop.plannedAt?.toIso8601String(),
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> updateVisitStatus(String id, VisitStatus status) async {
@@ -207,7 +203,10 @@ CREATE TABLE meta (
     ];
   }
 
-  Future<StockLine?> getStock(String itemCode, {DatabaseExecutor? executor}) async {
+  Future<StockLine?> getStock(
+    String itemCode, {
+    DatabaseExecutor? executor,
+  }) async {
     final db = executor ?? await database;
     final rows = await db.query(
       'van_stock',
@@ -233,10 +232,7 @@ CREATE TABLE meta (
     final db = executor ?? await database;
     await db.update(
       'van_stock',
-      {
-        'qty': qty,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
+      {'qty': qty, 'updated_at': DateTime.now().toIso8601String()},
       where: 'item_code = ?',
       whereArgs: [itemCode],
     );
@@ -258,6 +254,23 @@ CREATE TABLE meta (
         });
       }
     });
+  }
+
+  Future<void> upsertStockLine(StockLine line) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.insert(
+      'van_stock',
+      {
+        'item_code': line.itemCode,
+        'item_name': line.itemName,
+        'qty': line.qty,
+        'uom': line.uom,
+        'unit_price': line.unitPrice,
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<void> clearStops() async {
@@ -379,23 +392,19 @@ CREATE TABLE meta (
     final db = executor ?? await database;
     // Stable primary key for (entity, op) so create is idempotent / visit replaceable.
     final id = 'sq_${entityType}_${entityId}_$op';
-    await db.insert(
-      'sync_queue',
-      {
-        'id': id,
-        'client_id': clientId,
-        'entity_type': entityType,
-        'entity_id': entityId,
-        'op': op,
-        'method': method,
-        'args_json': jsonEncode(args),
-        'status': 'queued',
-        'attempts': 0,
-        'last_error': null,
-        'created_at': DateTime.now().toIso8601String(),
-      },
-      conflictAlgorithm: conflict,
-    );
+    await db.insert('sync_queue', {
+      'id': id,
+      'client_id': clientId,
+      'entity_type': entityType,
+      'entity_id': entityId,
+      'op': op,
+      'method': method,
+      'args_json': jsonEncode(args),
+      'status': 'queued',
+      'attempts': 0,
+      'last_error': null,
+      'created_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: conflict);
   }
 
   Future<List<SyncQueueItem>> peekQueue({
@@ -425,10 +434,7 @@ CREATE TABLE meta (
       final item = _queueFromRow(rows.first);
       await txn.update(
         'sync_queue',
-        {
-          'status': 'in_flight',
-          'attempts': item.attempts + 1,
-        },
+        {'status': 'in_flight', 'attempts': item.attempts + 1},
         where: 'id = ?',
         whereArgs: [item.id],
       );
@@ -457,10 +463,7 @@ CREATE TABLE meta (
     final db = await database;
     await db.update(
       'sync_queue',
-      {
-        'status': 'awaiting_erp',
-        'last_error': error,
-      },
+      {'status': 'awaiting_erp', 'last_error': error},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -470,10 +473,7 @@ CREATE TABLE meta (
     final db = await database;
     await db.update(
       'sync_queue',
-      {
-        'status': 'failed',
-        'last_error': error,
-      },
+      {'status': 'failed', 'last_error': error},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -483,10 +483,7 @@ CREATE TABLE meta (
     final db = await database;
     await db.update(
       'sync_queue',
-      {
-        'status': 'queued',
-        'last_error': null,
-      },
+      {'status': 'queued', 'last_error': null},
       where: 'id = ? AND status = ?',
       whereArgs: [id, 'failed'],
     );
@@ -589,8 +586,7 @@ CREATE TABLE meta (
       customerName: '${r['customer_name']}',
       amount: (r['amount'] as num).toDouble(),
       method: '${r['method']}',
-      collectedAt:
-          DateTime.tryParse('${r['collected_at']}') ?? DateTime.now(),
+      collectedAt: DateTime.tryParse('${r['collected_at']}') ?? DateTime.now(),
       syncStatus: _syncStatusFrom('${r['sync_status']}'),
       erpName: r['erp_name'] == null ? null : '${r['erp_name']}',
     );

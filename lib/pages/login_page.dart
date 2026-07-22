@@ -64,15 +64,13 @@ class _LoginPageState extends State<LoginPage>
     setState(() => _busy = false);
     if (result is ErpnextLoginOk) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Signed in as ${result.session.fullName}'),
-        ),
+        SnackBar(content: Text('Signed in as ${result.session.fullName}')),
       );
       widget.onAuthed();
     } else if (result is ErpnextLoginFail) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.message)));
     }
   }
 
@@ -82,9 +80,9 @@ class _LoginPageState extends State<LoginPage>
     final result = await widget.session.ping();
     if (!mounted) return;
     setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   @override
@@ -172,7 +170,9 @@ class _LoginPageState extends State<LoginPage>
                           ),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: scheme.outlineVariant.withValues(alpha: 0.55),
+                            color: scheme.outlineVariant.withValues(
+                              alpha: 0.55,
+                            ),
                           ),
                         ),
                         child: Padding(

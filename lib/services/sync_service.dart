@@ -6,8 +6,8 @@ import 'session.dart';
 /// Idempotent outbox flush + ERP pull (no soft-ack for go_van writes).
 class SyncService {
   SyncService(this.session, {VanSaleDb? db, VanSaleRepo? repo})
-      : db = db ?? VanSaleDb.instance,
-        repo = repo ?? vanSaleRepo;
+    : db = db ?? VanSaleDb.instance,
+      repo = repo ?? vanSaleRepo;
 
   final VanSaleSession session;
   final VanSaleDb db;

@@ -6,11 +6,7 @@ import '../services/session.dart';
 import '../services/sync_service.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({
-    super.key,
-    required this.session,
-    required this.sync,
-  });
+  const SettingsPage({super.key, required this.session, required this.sync});
 
   final VanSaleSession session;
   final SyncService sync;
@@ -51,9 +47,9 @@ class _SettingsPageState extends State<SettingsPage> {
     widget.session.updateBaseUrl(prefs.siteUrl);
     if (!mounted) return;
     setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Settings saved')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Settings saved')));
   }
 
   Future<void> _ping() async {
@@ -66,9 +62,9 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     if (!mounted) return;
     setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   @override
@@ -83,8 +79,8 @@ class _SettingsPageState extends State<SettingsPage> {
             'ERPNext connection and van defaults. Sales sync to Sales Invoice / '
             'Payment Entry / Stock Entry.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 16),
           TextField(

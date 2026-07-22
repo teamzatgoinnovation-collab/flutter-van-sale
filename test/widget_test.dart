@@ -69,8 +69,9 @@ void main() {
       args: {'client_id': order.clientId},
     );
     final again = await db.peekQueue(statuses: const ['queued']);
-    final creates =
-        again.where((q) => q.entityType == 'van_order' && q.op == 'create');
+    final creates = again.where(
+      (q) => q.entityType == 'van_order' && q.op == 'create',
+    );
     expect(creates.length, 1);
   });
 }

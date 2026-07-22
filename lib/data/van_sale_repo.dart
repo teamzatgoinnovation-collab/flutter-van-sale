@@ -63,7 +63,8 @@ class VanSaleRepo {
             sequence: (map['sequence'] as num?)?.toInt() ?? i + 1,
             lat: double.tryParse('${map['lat'] ?? ''}') ?? 0,
             lng: double.tryParse('${map['lng'] ?? ''}') ?? 0,
-            plannedAt: DateTime.tryParse('${map['planned_at'] ?? ''}') ??
+            plannedAt:
+                DateTime.tryParse('${map['planned_at'] ?? ''}') ??
                 DateTime.now(),
             visitStatus: fromErp ?? existingStatuses[id] ?? VisitStatus.planned,
           ),
@@ -77,11 +78,7 @@ class VanSaleRepo {
       if (warehouse.isNotEmpty) {
         final stockEnv = await session.store.callMethod(
           ZatGoApiMethods.goVanStockList,
-          args: {
-            'warehouse': warehouse,
-            'page': 1,
-            'page_size': 200,
-          },
+          args: {'warehouse': warehouse, 'page': 1, 'page_size': 200},
         );
         final stockRows = _asList(stockEnv.data);
         final lines = <StockLine>[
@@ -92,7 +89,8 @@ class VanSaleRepo {
                 itemName: '${raw['item_name'] ?? raw['item_code'] ?? ''}',
                 qty: (raw['qty'] as num?)?.toDouble() ?? 0,
                 uom: '${raw['uom'] ?? 'Nos'}',
-                unitPrice: (raw['unit_price'] as num?)?.toDouble() ??
+                unitPrice:
+                    (raw['unit_price'] as num?)?.toDouble() ??
                     (raw['rate'] as num?)?.toDouble() ??
                     0,
               ),
@@ -281,6 +279,101 @@ class VanSaleRepo {
         executor: txn,
       );
     });
+  }
+
+  /// Create ERPNext Customer (online). Returns customer name for the picker.
+  Future<String> createCustomer({
+    required VanSaleSession session,
+    required String customerName,
+    String? phone,
+  }) async {
+    if (!session.connected) {
+      throw StateError('Sign in to create a customer in ERPNext.');
+    }
+    final name = customerName.trim();
+    if (name.isEmpty) throw StateError('Customer name is required.');
+    final env = await session.store.callMethod(
+      ZatGoApiMethods.accountingCustomersCreate,
+      args: {
+        'customer_name': name,
+        if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+      },
+    );
+    final data = env.data;
+    if (data is Map) {
+      final id = '${data['id'] ?? data['name'] ?? data['customer_name'] ?? name}';
+      if (id.isNotEmpty) return id;
+    }
+    return name;
+  }
+
+  /// Create ERPNext Item and optionally load qty onto the van warehouse.
+  Future<StockLine> createProduct({
+    required VanSaleSession session,
+    required String itemCode,
+    required String itemName,
+    required double unitPrice,
+    double loadQty = 0,
+    String uom = 'Nos',
+  }) async {
+    if (!session.connected) {
+      throw StateError('Sign in to create a product in ERPNext.');
+    }
+    final code = itemCode.trim();
+    final label = itemName.trim().isEmpty ? code : itemName.trim();
+    if (code.isEmpty) throw StateError('Item code is required.');
+
+    final env = await session.store.callMethod(
+      ZatGoApiMethods.warehouseItemsCreate,
+      args: {
+        'item_code': code,
+        'item_name': label,
+        'stock_uom': uom,
+        'standard_rate': unitPrice,
+        'is_stock_item': 1,
+      },
+    );
+    final data = env.data is Map ? Map<String, dynamic>.from(env.data as Map) : {};
+    final createdCode = '${data['item_code'] ?? data['id'] ?? data['name'] ?? code}';
+    final createdName = '${data['item_name'] ?? data['name'] ?? label}';
+    final rate = (data['rate'] as num?)?.toDouble() ??
+        (data['price'] as num?)?.toDouble() ??
+        unitPrice;
+    final createdUom = '${data['uom'] ?? uom}';
+
+    var qty = 0.0;
+    final existing = await db.getStock(createdCode);
+    if (existing != null) qty = existing.qty;
+
+    await db.upsertStockLine(
+      StockLine(
+        itemCode: createdCode,
+        itemName: createdName,
+        qty: qty,
+        uom: createdUom,
+        unitPrice: rate,
+      ),
+    );
+
+    if (loadQty > 0) {
+      final warehouse = VanSalePrefs.instance.warehouse.trim();
+      if (warehouse.isEmpty) {
+        throw StateError(
+          'Product created, but set van warehouse in Settings to load qty.',
+        );
+      }
+      await adjustStock(itemCode: createdCode, delta: loadQty);
+    }
+
+    final line = await db.getStock(createdCode);
+    return line ??
+        StockLine(
+          itemCode: createdCode,
+          itemName: createdName,
+          qty: loadQty > 0 ? loadQty : qty,
+          uom: createdUom,
+          unitPrice: rate,
+        );
   }
 
   List<dynamic> _asList(Object? data) {

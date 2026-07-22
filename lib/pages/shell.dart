@@ -60,10 +60,8 @@ class _VanSaleShellState extends State<VanSaleShell> {
   void _openSettings() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => SettingsPage(
-          session: widget.session,
-          sync: widget.sync,
-        ),
+        builder: (_) =>
+            SettingsPage(session: widget.session, sync: widget.sync),
       ),
     );
   }
@@ -73,9 +71,7 @@ class _VanSaleShellState extends State<VanSaleShell> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          'Synced ${result.processed} · failed ${result.failed}',
-        ),
+        content: Text('Synced ${result.processed} · failed ${result.failed}'),
       ),
     );
   }
@@ -101,10 +97,7 @@ class _VanSaleShellState extends State<VanSaleShell> {
         onConsumedPrefill: _clearPrefill,
         onOpenMenu: _openDrawer,
       ),
-      StockPage(
-        sync: widget.sync,
-        onOpenMenu: _openDrawer,
-      ),
+      StockPage(sync: widget.sync, onOpenMenu: _openDrawer),
     ];
 
     final user = widget.session.fullName ?? widget.session.user ?? 'User';
@@ -128,15 +121,11 @@ class _VanSaleShellState extends State<VanSaleShell> {
                     children: [
                       Text(
                         'VanSale',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        user,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
+                      Text(user, style: Theme.of(context).textTheme.bodyMedium),
                       Text(
                         widget.session.baseUrl,
                         style: Theme.of(context).textTheme.bodySmall,

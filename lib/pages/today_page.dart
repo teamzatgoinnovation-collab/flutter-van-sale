@@ -52,7 +52,8 @@ class _TodayPageState extends State<TodayPage> {
     setState(() => _busy = false);
     final pending = await vanSaleRepo.syncCounts();
     if (!mounted) return;
-    final left = (pending['queued'] ?? 0) +
+    final left =
+        (pending['queued'] ?? 0) +
         (pending['awaiting_erp'] ?? 0) +
         (pending['failed'] ?? 0);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -61,8 +62,8 @@ class _TodayPageState extends State<TodayPage> {
           result.processed == 0 && left == 0
               ? 'Nothing to sync'
               : 'Processed ${result.processed} · '
-                  'ERP pending ${result.awaitingErp} · '
-                  'failed ${result.failed} · still open $left',
+                    'ERP pending ${result.awaitingErp} · '
+                    'failed ${result.failed} · still open $left',
         ),
       ),
     );
@@ -313,8 +314,8 @@ class _StopCard extends StatelessWidget {
                       Text(
                         stop.address,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -363,10 +364,7 @@ class _StopCard extends StatelessWidget {
                 ),
                 if (stop.visitStatus != VisitStatus.completed &&
                     stop.visitStatus != VisitStatus.skipped)
-                  TextButton(
-                    onPressed: onSkip,
-                    child: const Text('Skip'),
-                  ),
+                  TextButton(onPressed: onSkip, child: const Text('Skip')),
               ],
             ),
           ],
