@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../customer/models/customer_model.dart';
 import '../customer/pages/customer_form_page.dart';
+import '../customer/pages/customer_search_page.dart';
 import '../customer/repositories/customer_repository.dart';
 import '../data/van_sale_repo.dart';
 import '../models/models.dart';
@@ -73,6 +74,26 @@ class _OrdersPageState extends State<OrdersPage> {
     setState(() => _orders = orders);
   }
 
+  Future<CustomerModel?> _pickCustomer({String? initialQuery}) async {
+    final session = _session;
+    if (session == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session unavailable')),
+      );
+      return null;
+    }
+    return Navigator.of(context).push<CustomerModel>(
+      MaterialPageRoute(
+        builder: (_) => CustomerSearchPage(
+          session: session,
+          sync: widget.sync,
+          selectMode: true,
+          initialQuery: initialQuery,
+        ),
+      ),
+    );
+  }
+
   Future<String?> _createCustomerDialog() async {
     final session = _session;
     if (session == null) {
@@ -122,20 +143,22 @@ class _OrdersPageState extends State<OrdersPage> {
   Future<void> _newOrder({String? prefillCustomer}) async {
     if (_saving) return;
     var stock = await vanSaleRepo.listStock();
-    final stops = await vanSaleRepo.listStops();
-    final localCustomers = await customerRepository.list();
     if (!mounted) return;
 
-    final customers = <String>[
-      if (prefillCustomer != null && prefillCustomer.trim().isNotEmpty)
-        prefillCustomer.trim(),
-      ...localCustomers.map((c) => c.displayName),
-      ...stops.map((s) => s.customerName),
-    ];
-    var uniqueCustomers = <String>{...customers}.toList();
-    var customer = uniqueCustomers.isNotEmpty
-        ? uniqueCustomers.first
-        : (prefillCustomer ?? '');
+    CustomerModel? selected;
+    var customer = prefillCustomer?.trim() ?? '';
+    if (customer.isNotEmpty) {
+      final hits = await customerRepository.search(query: customer, limit: 8);
+      for (final c in hits.items) {
+        if (c.displayName == customer ||
+            c.customerName == customer ||
+            c.erpName == customer) {
+          selected = c;
+          customer = c.displayName;
+          break;
+        }
+      }
+    }
     final qtys = <String, double>{for (final s in stock) s.itemCode: 0};
 
     final ok = await showDialog<bool>(
@@ -155,45 +178,51 @@ class _OrdersPageState extends State<OrdersPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (uniqueCustomers.isEmpty)
-                      TextField(
-                        decoration: const InputDecoration(
-                          labelText: 'Customer',
-                          hintText: 'Create a customer or type a name',
+                    InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Customer',
+                        border: OutlineInputBorder(),
+                      ),
+                      child: Text(
+                        customer.isEmpty ? 'Search customers…' : customer,
+                        style: TextStyle(
+                          color: customer.isEmpty
+                              ? Theme.of(ctx).hintColor
+                              : null,
                         ),
-                        onChanged: (v) => customer = v,
-                      )
-                    else
-                      DropdownMenu<String>(
-                        initialSelection: uniqueCustomers.contains(customer)
-                            ? customer
-                            : null,
-                        label: const Text('Customer'),
-                        expandedInsets: EdgeInsets.zero,
-                        dropdownMenuEntries: [
-                          for (final c in uniqueCustomers)
-                            DropdownMenuEntry(value: c, label: c),
-                        ],
-                        onSelected: (v) =>
-                            setLocal(() => customer = v ?? customer),
                       ),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: () async {
-                          final created = await _createCustomerDialog();
-                          if (created == null) return;
-                          setLocal(() {
-                            uniqueCustomers = {
-                              created,
-                              ...uniqueCustomers,
-                            }.toList();
-                            customer = created;
-                          });
-                        },
-                        icon: const Icon(Icons.person_add_outlined, size: 18),
-                        label: const Text('New customer'),
-                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        FilledButton.tonalIcon(
+                          onPressed: () async {
+                            final picked = await _pickCustomer(
+                              initialQuery: customer,
+                            );
+                            if (picked == null) return;
+                            setLocal(() {
+                              selected = picked;
+                              customer = picked.displayName;
+                            });
+                          },
+                          icon: const Icon(Icons.search, size: 18),
+                          label: const Text('Search'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final created = await _createCustomerDialog();
+                            if (created == null) return;
+                            setLocal(() {
+                              customer = created;
+                              selected = null;
+                            });
+                          },
+                          icon: const Icon(Icons.person_add_outlined, size: 18),
+                          label: const Text('New'),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Align(
@@ -308,6 +337,9 @@ class _OrdersPageState extends State<OrdersPage> {
 
     setState(() => _saving = true);
     try {
+      if (selected != null) {
+        await customerRepository.markRecent(selected!.id);
+      }
       await vanSaleRepo.createOrder(
         customerName: customer.trim(),
         lines: lines,

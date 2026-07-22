@@ -157,6 +157,7 @@ class SyncService extends ChangeNotifier {
         notifyListeners();
         await repo.refreshFromErpnext(session);
         await products.refreshFromErp(session);
+        await customers.refreshFromErp(session);
         progressCurrent = progressTotal;
         notifyListeners();
       }

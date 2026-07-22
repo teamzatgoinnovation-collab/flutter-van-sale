@@ -193,6 +193,12 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                   onChanged: (v) => _draft.customerCode = v,
                 ),
                 TextFormField(
+                  decoration: const InputDecoration(
+                    labelText: 'Barcode / loyalty card (optional)',
+                  ),
+                  onChanged: (v) => _draft.barcode = v,
+                ),
+                TextFormField(
                   decoration: const InputDecoration(labelText: 'Website'),
                   keyboardType: TextInputType.url,
                   onChanged: (v) => _draft.website = v,

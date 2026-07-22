@@ -39,6 +39,8 @@ class CustomerModel {
     this.remarks,
     this.erpName,
     this.erpModified,
+    this.barcode,
+    this.isFavorite = false,
     this.crImagePath,
     this.vatCertificatePath,
     this.customerPhotoPath,
@@ -90,6 +92,10 @@ class CustomerModel {
   final String? erpModified;
   final String? lastError;
 
+  /// Optional customer barcode / loyalty card for scan search.
+  final String? barcode;
+  final bool isFavorite;
+
   final String? crImagePath;
   final String? vatCertificatePath;
   final String? customerPhotoPath;
@@ -101,12 +107,23 @@ class CustomerModel {
   String get displayName =>
       (erpName != null && erpName!.trim().isNotEmpty) ? erpName!.trim() : customerName;
 
+  String get subtitle {
+    final parts = <String>[
+      if (mobileNo.trim().isNotEmpty) mobileNo.trim(),
+      if ((customerCode ?? '').trim().isNotEmpty) customerCode!.trim(),
+      if ((taxId ?? '').trim().isNotEmpty) 'VAT ${taxId!.trim()}',
+    ];
+    return parts.join(' · ');
+  }
+
   CustomerModel copyWith({
     SyncStatus? syncStatus,
     String? erpName,
     String? erpModified,
     String? lastError,
     bool? enabled,
+    String? barcode,
+    bool? isFavorite,
   }) {
     return CustomerModel(
       id: id,
@@ -143,6 +160,8 @@ class CustomerModel {
       syncStatus: syncStatus ?? this.syncStatus,
       erpName: erpName ?? this.erpName,
       erpModified: erpModified ?? this.erpModified,
+      barcode: barcode ?? this.barcode,
+      isFavorite: isFavorite ?? this.isFavorite,
       lastError: lastError,
       crImagePath: crImagePath,
       vatCertificatePath: vatCertificatePath,
@@ -152,6 +171,25 @@ class CustomerModel {
     );
   }
 }
+
+/// Paginated offline customer search result.
+class CustomerSearchResult {
+  const CustomerSearchResult({
+    required this.items,
+    required this.total,
+    required this.limit,
+    required this.offset,
+    required this.hasMore,
+  });
+
+  final List<CustomerModel> items;
+  final int total;
+  final int limit;
+  final int offset;
+  final bool hasMore;
+}
+
+enum CustomerSearchScope { all, recent, favorites }
 
 /// Cached ERPNext defaults for customer forms.
 class CustomerDefaults {

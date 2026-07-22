@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../customer/pages/customer_search_page.dart';
 import '../services/auth_scope.dart';
 import '../services/session.dart';
 import '../services/sync_service.dart';
@@ -91,6 +92,18 @@ class _VanSaleShellState extends State<VanSaleShell> {
     );
   }
 
+  void _openCustomers() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CustomerSearchPage(
+          session: widget.session,
+          sync: widget.sync,
+          selectMode: false,
+        ),
+      ),
+    );
+  }
+
   Future<void> _syncNow() async {
     final result = await widget.sync.flush();
     if (!mounted) return;
@@ -170,6 +183,15 @@ class _VanSaleShellState extends State<VanSaleShell> {
                   onTap: () {
                     Navigator.pop(context);
                     _openSettings();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.people_outline),
+                  title: const Text('Customers'),
+                  subtitle: const Text('Search · recent · favorites'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openCustomers();
                   },
                 ),
                 ListTile(

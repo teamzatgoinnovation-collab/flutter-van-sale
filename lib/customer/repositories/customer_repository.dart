@@ -12,6 +12,7 @@ import '../validation/customer_validators.dart';
 abstract final class CustomerApiMethods {
   static const defaults = 'zatgo_core.api.v1.accounting.customers.defaults';
   static const sync = 'zatgo_core.api.v1.accounting.customers.sync';
+  static const list = 'zatgo_core.api.v1.accounting.customers.list';
 }
 /// Offline-first customer repository (local SQLite → ERPNext sync).
 class CustomerRepository {
@@ -79,6 +80,131 @@ class CustomerRepository {
       db.listCustomers(query: query);
 
   Future<CustomerModel?> get(String id) => db.getCustomer(id);
+
+  /// Instant offline search across name / Arabic / phone / VAT / CR / code / email / barcode.
+  Future<CustomerSearchResult> search({
+    String? query,
+    int limit = 30,
+    int offset = 0,
+    CustomerSearchScope scope = CustomerSearchScope.all,
+  }) {
+    return db.searchCustomers(
+      query: query,
+      limit: limit,
+      offset: offset,
+      favoritesOnly: scope == CustomerSearchScope.favorites,
+      recentOnly: scope == CustomerSearchScope.recent,
+    );
+  }
+
+  Future<CustomerModel?> findByBarcode(String barcode) =>
+      db.findCustomerByBarcode(barcode);
+
+  Future<void> toggleFavorite(String customerId, {required bool favorite}) =>
+      db.setCustomerFavorite(customerId, favorite);
+
+  Future<void> markRecent(String customerId) =>
+      db.touchCustomerRecent(customerId);
+
+  /// Pull ERP customers into local SQLite for offline search (does not wipe drafts).
+  Future<int> refreshFromErp(VanSaleSession session) async {
+    if (!session.connected) return 0;
+    var imported = 0;
+    try {
+      for (var page = 1; page <= 10; page++) {
+        final env = await session.store.callMethod(
+          CustomerApiMethods.list,
+          args: {'page': page, 'page_size': 100},
+        );
+        final data = env.data;
+        List rows = const [];
+        if (data is List) {
+          rows = data;
+        } else if (data is Map && data['data'] is List) {
+          rows = data['data'] as List;
+        }
+        if (rows.isEmpty) break;
+
+        for (final raw in rows) {
+          if (raw is! Map) continue;
+          final map = Map<String, dynamic>.from(raw);
+          final erpName = '${map['id'] ?? map['name'] ?? ''}'.trim();
+          if (erpName.isEmpty) continue;
+
+          final existing = await db.getCustomer('erp_$erpName') ??
+              await _findLocalByErpName(erpName);
+          if (existing != null &&
+              existing.syncStatus != SyncStatus.uploaded &&
+              existing.erpName == null) {
+            continue;
+          }
+
+          final now = DateTime.now();
+          final fav = existing != null &&
+              await db.isCustomerFavorite(existing.id);
+          await db.upsertCustomer(
+            CustomerModel(
+              id: existing?.id ?? 'erp_$erpName',
+              clientId: existing?.clientId ?? 'erp_$erpName',
+              customerName:
+                  '${map['customer_name'] ?? map['name'] ?? erpName}',
+              customerNameAr: map['customer_name_ar'] == null
+                  ? existing?.customerNameAr
+                  : '${map['customer_name_ar']}',
+              customerType: '${map['customer_type'] ?? existing?.customerType ?? 'Company'}',
+              customerGroup:
+                  '${map['customer_group'] ?? existing?.customerGroup ?? _defaults.customerGroup}',
+              territory:
+                  '${map['territory'] ?? existing?.territory ?? _defaults.territory}',
+              taxId: map['tax_id'] == null
+                  ? existing?.taxId
+                  : '${map['tax_id']}',
+              crNumber: map['cr_number'] == null
+                  ? existing?.crNumber
+                  : '${map['cr_number']}',
+              customerCode: map['customer_code'] == null
+                  ? existing?.customerCode
+                  : '${map['customer_code']}',
+              mobileNo:
+                  '${map['mobile_no'] ?? map['phone'] ?? existing?.mobileNo ?? ''}',
+              phone: map['phone'] == null ? existing?.phone : '${map['phone']}',
+              email: map['email'] == null && map['email_id'] == null
+                  ? existing?.email
+                  : '${map['email'] ?? map['email_id']}',
+              addressLine1: existing?.addressLine1 ?? '',
+              city: existing?.city ?? '',
+              country: existing?.country ?? _defaults.country,
+              barcode: map['barcode'] == null
+                  ? existing?.barcode
+                  : '${map['barcode']}',
+              syncStatus: SyncStatus.uploaded,
+              erpName: erpName,
+              erpModified: map['modified'] == null
+                  ? existing?.erpModified
+                  : '${map['modified']}',
+              enabled: true,
+              isFavorite: fav,
+              createdAt: existing?.createdAt ?? now,
+              updatedAt: now,
+            ),
+          );
+          imported++;
+        }
+        if (rows.length < 100) break;
+      }
+    } catch (_) {
+      return imported;
+    }
+    return imported;
+  }
+
+  Future<CustomerModel?> _findLocalByErpName(String erpName) async {
+    final page = await db.searchCustomers(query: erpName, limit: 20);
+    for (final c in page.items) {
+      if (c.erpName == erpName || c.customerName == erpName) return c;
+    }
+    return null;
+  }
 
   /// Persist locally first and enqueue ERP sync (works offline).
   Future<CustomerModel> createLocal(CustomerDraft draft) async {
@@ -151,6 +277,7 @@ class CustomerRepository {
       enabled: draft.enabled,
       remarks: _emptyToNull(draft.remarks),
       syncStatus: SyncStatus.pending,
+      barcode: _emptyToNull(draft.barcode),
       crImagePath: draft.crImagePath,
       vatCertificatePath: draft.vatCertificatePath,
       customerPhotoPath: draft.customerPhotoPath,
@@ -250,6 +377,7 @@ class CustomerRepository {
       syncStatus: SyncStatus.pending,
       erpName: existing.erpName,
       erpModified: existing.erpModified,
+      barcode: _emptyToNull(draft.barcode) ?? existing.barcode,
       crImagePath: draft.crImagePath ?? existing.crImagePath,
       vatCertificatePath:
           draft.vatCertificatePath ?? existing.vatCertificatePath,

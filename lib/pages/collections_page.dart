@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../customer/models/customer_model.dart';
+import '../customer/pages/customer_search_page.dart';
+import '../customer/repositories/customer_repository.dart';
 import '../data/van_sale_repo.dart';
 import '../models/models.dart';
+import '../services/auth_scope.dart';
 import '../services/sync_service.dart';
 import '../widgets/widgets.dart';
 
@@ -59,15 +63,23 @@ class _CollectionsPageState extends State<CollectionsPage> {
 
   Future<void> _collect({String? prefillCustomer}) async {
     if (_saving) return;
-    final stops = await vanSaleRepo.listStops();
-    final customers = <String>{
-      if (prefillCustomer != null && prefillCustomer.trim().isNotEmpty)
-        prefillCustomer.trim(),
-      ...stops.map((s) => s.customerName),
-    }.toList();
-    var customer = customers.isNotEmpty
-        ? customers.first
-        : (prefillCustomer ?? 'Customer');
+    final session = VanSaleAuthScope.maybeOf(context)?.session;
+
+    CustomerModel? selected;
+    var customer = prefillCustomer?.trim() ?? '';
+    if (customer.isNotEmpty) {
+      final hits = await customerRepository.search(query: customer, limit: 8);
+      for (final c in hits.items) {
+        if (c.displayName == customer ||
+            c.customerName == customer ||
+            c.erpName == customer) {
+          selected = c;
+          customer = c.displayName;
+          break;
+        }
+      }
+    }
+
     final amount = TextEditingController();
     var method = 'Cash';
 
@@ -80,15 +92,45 @@ class _CollectionsPageState extends State<CollectionsPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownMenu<String>(
-                initialSelection: customer,
-                label: const Text('Customer'),
-                expandedInsets: EdgeInsets.zero,
-                dropdownMenuEntries: [
-                  for (final c in customers)
-                    DropdownMenuEntry(value: c, label: c),
-                ],
-                onSelected: (v) => setLocal(() => customer = v ?? customer),
+              InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Customer',
+                  border: OutlineInputBorder(),
+                ),
+                child: Text(
+                  customer.isEmpty ? 'Search customers…' : customer,
+                  style: TextStyle(
+                    color: customer.isEmpty ? Theme.of(ctx).hintColor : null,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.tonalIcon(
+                  onPressed: session == null
+                      ? null
+                      : () async {
+                          final picked =
+                              await Navigator.of(context).push<CustomerModel>(
+                            MaterialPageRoute(
+                              builder: (_) => CustomerSearchPage(
+                                session: session,
+                                sync: widget.sync,
+                                selectMode: true,
+                                initialQuery: customer,
+                              ),
+                            ),
+                          );
+                          if (picked == null) return;
+                          setLocal(() {
+                            selected = picked;
+                            customer = picked.displayName;
+                          });
+                        },
+                  icon: const Icon(Icons.search, size: 18),
+                  label: const Text('Search customer'),
+                ),
               ),
               const SizedBox(height: 10),
               TextField(
@@ -125,8 +167,18 @@ class _CollectionsPageState extends State<CollectionsPage> {
     );
 
     if (ok != true || !mounted) return;
+    if (customer.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pick a customer')),
+      );
+      amount.dispose();
+      return;
+    }
     setState(() => _saving = true);
     try {
+      if (selected != null) {
+        await customerRepository.markRecent(selected!.id);
+      }
       String? salesInvoice;
       final orders = await vanSaleRepo.listOrders();
       for (final o in orders) {
@@ -139,7 +191,7 @@ class _CollectionsPageState extends State<CollectionsPage> {
         }
       }
       await vanSaleRepo.recordCollection(
-        customerName: customer.trim().isEmpty ? 'Customer' : customer.trim(),
+        customerName: customer.trim(),
         amount: double.tryParse(amount.text) ?? 0,
         method: method,
         salesInvoice: salesInvoice,

@@ -46,11 +46,12 @@ class VanSaleDb {
     final path = p.join(dir, 'van_sale.db');
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await _createV1(db);
         await _createCustomersTable(db);
         await _createCustomerIndexes(db);
+        await _createCustomerSearchTables(db);
         await _createProductsTable(db);
         await _createProductIndexes(db);
         await _createSyncLogsTable(db);
@@ -86,6 +87,13 @@ class VanSaleDb {
               'ALTER TABLE products ADD COLUMN erp_modified TEXT',
             );
           } catch (_) {}
+        }
+        if (oldVersion < 5) {
+          try {
+            await db.execute('ALTER TABLE customers ADD COLUMN barcode TEXT');
+          } catch (_) {}
+          await _createCustomerSearchTables(db);
+          await _createCustomerSearchIndexes(db);
         }
       },
     );
@@ -204,6 +212,7 @@ CREATE TABLE IF NOT EXISTS customers (
   vat_certificate_path TEXT,
   customer_photo_path TEXT,
   erp_modified TEXT,
+  barcode TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 )''');
@@ -224,6 +233,41 @@ CREATE TABLE IF NOT EXISTS customers (
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_customers_cr ON customers(cr_number)',
+    );
+    await _createCustomerSearchIndexes(db);
+  }
+
+  Future<void> _createCustomerSearchTables(DatabaseExecutor db) async {
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS customer_favorites (
+  customer_id TEXT PRIMARY KEY NOT NULL,
+  created_at TEXT NOT NULL
+)''');
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS customer_recent (
+  customer_id TEXT PRIMARY KEY NOT NULL,
+  used_at TEXT NOT NULL
+)''');
+  }
+
+  Future<void> _createCustomerSearchIndexes(DatabaseExecutor db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_name_ar ON customers(customer_name_ar)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_code ON customers(customer_code)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_barcode ON customers(barcode)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customer_recent_used ON customer_recent(used_at DESC)',
     );
   }
 
@@ -570,27 +614,187 @@ CREATE TABLE IF NOT EXISTS sync_logs (
     return _customerFromRow(rows.first);
   }
 
-  Future<List<CustomerModel>> listCustomers({String? query, bool enabledOnly = true}) async {
-    final db = await database;
-    final where = <String>[];
-    final args = <Object?>[];
-    if (enabledOnly) {
-      where.add('enabled = 1');
-    }
-    if (query != null && query.trim().isNotEmpty) {
-      final q = '%${query.trim()}%';
-      where.add(
-        '(customer_name LIKE ? OR customer_name_ar LIKE ? OR mobile_no LIKE ? OR erp_name LIKE ? OR tax_id LIKE ?)',
-      );
-      args.addAll([q, q, q, q, q]);
-    }
-    final rows = await db.query(
-      'customers',
-      where: where.isEmpty ? null : where.join(' AND '),
-      whereArgs: args.isEmpty ? null : args,
-      orderBy: 'customer_name COLLATE NOCASE ASC',
+  Future<List<CustomerModel>> listCustomers({
+    String? query,
+    bool enabledOnly = true,
+  }) async {
+    final page = await searchCustomers(
+      query: query,
+      enabledOnly: enabledOnly,
+      limit: 5000,
+      offset: 0,
     );
-    return rows.map(_customerFromRow).toList(growable: false);
+    return page.items;
+  }
+
+  /// Offline multi-field customer search with pagination.
+  Future<CustomerSearchResult> searchCustomers({
+    String? query,
+    int limit = 30,
+    int offset = 0,
+    bool enabledOnly = true,
+    bool favoritesOnly = false,
+    bool recentOnly = false,
+  }) async {
+    final db = await database;
+    final where = <String>['1=1'];
+    final args = <Object?>[];
+
+    if (enabledOnly) {
+      where.add('c.enabled = 1');
+    }
+
+    final q = query?.trim() ?? '';
+    if (q.isNotEmpty) {
+      final like = '%$q%';
+      where.add('''(
+  c.customer_name LIKE ? COLLATE NOCASE
+  OR c.customer_name_ar LIKE ? COLLATE NOCASE
+  OR c.mobile_no LIKE ?
+  OR c.phone LIKE ?
+  OR c.tax_id LIKE ? COLLATE NOCASE
+  OR c.cr_number LIKE ? COLLATE NOCASE
+  OR c.customer_code LIKE ? COLLATE NOCASE
+  OR c.email LIKE ? COLLATE NOCASE
+  OR c.erp_name LIKE ? COLLATE NOCASE
+  OR c.barcode LIKE ?
+)''');
+      args.addAll([like, like, like, like, like, like, like, like, like, like]);
+    }
+
+    final whereSql = where.join(' AND ');
+    late final String countSql;
+    late final String listSql;
+    late final String orderBy;
+
+    if (favoritesOnly) {
+      orderBy = 'f.created_at DESC';
+      countSql =
+          'SELECT COUNT(*) AS c FROM customers c INNER JOIN customer_favorites f ON f.customer_id = c.id WHERE $whereSql';
+      listSql = '''
+SELECT c.*, 1 AS is_favorite
+FROM customers c
+INNER JOIN customer_favorites f ON f.customer_id = c.id
+WHERE $whereSql
+ORDER BY $orderBy
+LIMIT ? OFFSET ?
+''';
+    } else if (recentOnly) {
+      orderBy = 'r.used_at DESC';
+      countSql =
+          'SELECT COUNT(*) AS c FROM customers c INNER JOIN customer_recent r ON r.customer_id = c.id WHERE $whereSql';
+      listSql = '''
+SELECT c.*,
+  CASE WHEN fav.customer_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite
+FROM customers c
+INNER JOIN customer_recent r ON r.customer_id = c.id
+LEFT JOIN customer_favorites fav ON fav.customer_id = c.id
+WHERE $whereSql
+ORDER BY $orderBy
+LIMIT ? OFFSET ?
+''';
+    } else {
+      orderBy = 'c.customer_name COLLATE NOCASE ASC';
+      countSql = 'SELECT COUNT(*) AS c FROM customers c WHERE $whereSql';
+      listSql = '''
+SELECT c.*,
+  CASE WHEN fav.customer_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite
+FROM customers c
+LEFT JOIN customer_favorites fav ON fav.customer_id = c.id
+WHERE $whereSql
+ORDER BY $orderBy
+LIMIT ? OFFSET ?
+''';
+    }
+
+    final countRows = await db.rawQuery(countSql, args);
+    final total = (countRows.first['c'] as num?)?.toInt() ?? 0;
+
+    final rows = await db.rawQuery(listSql, [...args, limit, offset]);
+    final items = rows.map((r) {
+      final model = _customerFromRow(r);
+      final fav = (r['is_favorite'] as num?)?.toInt() == 1;
+      return model.copyWith(isFavorite: fav);
+    }).toList(growable: false);
+
+    return CustomerSearchResult(
+      items: items,
+      total: total,
+      limit: limit,
+      offset: offset,
+      hasMore: offset + items.length < total,
+    );
+  }
+
+  Future<CustomerModel?> findCustomerByBarcode(String barcode) async {
+    final code = barcode.trim();
+    if (code.isEmpty) return null;
+    final db = await database;
+    final rows = await db.rawQuery(
+      '''
+SELECT c.*,
+  CASE WHEN f.customer_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite
+FROM customers c
+LEFT JOIN customer_favorites f ON f.customer_id = c.id
+WHERE c.barcode = ? AND c.enabled = 1
+LIMIT 1
+''',
+      [code],
+    );
+    if (rows.isEmpty) return null;
+    final model = _customerFromRow(rows.first);
+    final fav = (rows.first['is_favorite'] as num?)?.toInt() == 1;
+    return model.copyWith(isFavorite: fav);
+  }
+
+  Future<void> setCustomerFavorite(String customerId, bool favorite) async {
+    final db = await database;
+    if (favorite) {
+      await db.insert(
+        'customer_favorites',
+        {
+          'customer_id': customerId,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } else {
+      await db.delete(
+        'customer_favorites',
+        where: 'customer_id = ?',
+        whereArgs: [customerId],
+      );
+    }
+  }
+
+  Future<bool> isCustomerFavorite(String customerId) async {
+    final db = await database;
+    final rows = await db.query(
+      'customer_favorites',
+      where: 'customer_id = ?',
+      whereArgs: [customerId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  Future<void> touchCustomerRecent(String customerId) async {
+    final db = await database;
+    await db.insert(
+      'customer_recent',
+      {
+        'customer_id': customerId,
+        'used_at': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    // Keep last 50
+    await db.execute('''
+DELETE FROM customer_recent WHERE customer_id NOT IN (
+  SELECT customer_id FROM (
+    SELECT customer_id FROM customer_recent ORDER BY used_at DESC LIMIT 50
+  )
+)''');
   }
 
   Future<CustomerModel?> findCustomerDuplicate({
@@ -701,6 +905,7 @@ CREATE TABLE IF NOT EXISTS sync_logs (
         'cr_image_path': c.crImagePath,
         'vat_certificate_path': c.vatCertificatePath,
         'customer_photo_path': c.customerPhotoPath,
+        'barcode': c.barcode,
         'created_at': c.createdAt.toIso8601String(),
         'updated_at': c.updatedAt.toIso8601String(),
       };
@@ -726,15 +931,15 @@ CREATE TABLE IF NOT EXISTS sync_logs (
           r['customer_code'] == null ? null : '${r['customer_code']}',
       website: r['website'] == null ? null : '${r['website']}',
       industry: r['industry'] == null ? null : '${r['industry']}',
-      mobileNo: '${r['mobile_no']}',
+      mobileNo: '${r['mobile_no'] ?? ''}',
       phone: r['phone'] == null ? null : '${r['phone']}',
       email: r['email'] == null ? null : '${r['email']}',
-      addressLine1: '${r['address_line1']}',
+      addressLine1: '${r['address_line1'] ?? ''}',
       addressLine2:
           r['address_line2'] == null ? null : '${r['address_line2']}',
-      city: '${r['city']}',
+      city: '${r['city'] ?? ''}',
       state: r['state'] == null ? null : '${r['state']}',
-      country: '${r['country']}',
+      country: '${r['country'] ?? 'Saudi Arabia'}',
       postalCode: r['postal_code'] == null ? null : '${r['postal_code']}',
       googleMapUrl:
           r['google_map_url'] == null ? null : '${r['google_map_url']}',
@@ -748,6 +953,9 @@ CREATE TABLE IF NOT EXISTS sync_logs (
       currency: r['currency'] == null ? null : '${r['currency']}',
       enabled: (r['enabled'] as num?)?.toInt() != 0,
       remarks: r['remarks'] == null ? null : '${r['remarks']}',
+      barcode: r['barcode'] == null || '${r['barcode']}'.isEmpty
+          ? null
+          : '${r['barcode']}',
       crImagePath:
           r['cr_image_path'] == null ? null : '${r['cr_image_path']}',
       vatCertificatePath: r['vat_certificate_path'] == null

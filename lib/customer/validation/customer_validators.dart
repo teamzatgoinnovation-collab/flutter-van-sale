@@ -108,6 +108,7 @@ class CustomerDraft {
   String currency = '';
   bool enabled = true;
   String remarks = '';
+  String barcode = '';
   String? crImagePath;
   String? vatCertificatePath;
   String? customerPhotoPath;
