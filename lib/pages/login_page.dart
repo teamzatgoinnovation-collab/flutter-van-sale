@@ -111,169 +111,156 @@ class _LoginPageState extends State<LoginPage>
           ),
         ),
         child: SafeArea(
-          child: Stack(
-            children: [
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  tooltip: 'Site URL',
-                  onPressed: _busy ? null : _openSiteUrlSettings,
-                  icon: const Icon(Icons.settings_outlined),
-                ),
-              ),
-              Center(
-                child: FadeTransition(
-                  opacity: _fade,
-                  child: SlideTransition(
-                    position: _slide,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 420),
-                      child: ListView(
-                        padding: const EdgeInsets.all(24),
-                        children: [
-                          const SizedBox(height: 24),
-                          Center(
-                            child: Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(
-                                color: scheme.primary.withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: Icon(
-                                Icons.local_shipping_outlined,
-                                size: 32,
-                                color: scheme.primary,
-                              ),
-                            ),
+          child: Center(
+            child: FadeTransition(
+              opacity: _fade,
+              child: SlideTransition(
+                position: _slide,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: ListView(
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      const SizedBox(height: 24),
+                      Center(
+                        child: Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: scheme.primary.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(18),
                           ),
-                          const SizedBox(height: 20),
-                          Text(
-                            'ZatGo',
+                          child: Icon(
+                            Icons.local_shipping_outlined,
+                            size: 32,
+                            color: scheme.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'ZatGo',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          letterSpacing: 1.2,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'VanSale',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Sign in with your account to load routes, stock, and sales.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      InkWell(
+                        onTap: _busy ? null : _openSiteUrlSettings,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            siteUrl,
                             textAlign: TextAlign.center,
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                              letterSpacing: 1.2,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.primary,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          Text(
-                            'VanSale',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Sign in with your account to load routes, stock, and sales.',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          InkWell(
-                            onTap: _busy ? null : _openSiteUrlSettings,
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              child: Text(
-                                siteUrl,
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: scheme.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: scheme.surface.withValues(
-                                alpha: isDark ? 0.92 : 0.95,
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: scheme.outlineVariant.withValues(
-                                  alpha: 0.55,
-                                ),
-                              ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(20),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  TextField(
-                                    controller: _usr,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Email / User',
-                                      prefixIcon: Icon(Icons.person_outline),
-                                    ),
-                                    keyboardType: TextInputType.emailAddress,
-                                    autocorrect: false,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  TextField(
-                                    controller: _pwd,
-                                    decoration: InputDecoration(
-                                      labelText: 'Password',
-                                      prefixIcon: const Icon(Icons.lock_outline),
-                                      suffixIcon: IconButton(
-                                        tooltip: _obscure ? 'Show' : 'Hide',
-                                        onPressed: () => setState(
-                                          () => _obscure = !_obscure,
-                                        ),
-                                        icon: Icon(
-                                          _obscure
-                                              ? Icons.visibility_outlined
-                                              : Icons.visibility_off_outlined,
-                                        ),
-                                      ),
-                                    ),
-                                    obscureText: _obscure,
-                                    onSubmitted: (_) =>
-                                        _busy ? null : _login(),
-                                  ),
-                                  if (widget.session.lastError != null) ...[
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      widget.session.lastError!,
-                                      style: TextStyle(color: scheme.error),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 20),
-                                  FilledButton(
-                                    onPressed: _busy ? null : _login,
-                                    child: _busy
-                                        ? SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: scheme.onPrimary,
-                                            ),
-                                          )
-                                        : const Text('Sign in'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 20),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: scheme.surface.withValues(
+                            alpha: isDark ? 0.92 : 0.95,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: scheme.outlineVariant.withValues(
+                              alpha: 0.55,
+                            ),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              TextField(
+                                controller: _usr,
+                                decoration: const InputDecoration(
+                                  labelText: 'Email / User',
+                                  prefixIcon: Icon(Icons.person_outline),
+                                ),
+                                keyboardType: TextInputType.emailAddress,
+                                autocorrect: false,
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _pwd,
+                                decoration: InputDecoration(
+                                  labelText: 'Password',
+                                  prefixIcon: const Icon(Icons.lock_outline),
+                                  suffixIcon: IconButton(
+                                    tooltip: _obscure ? 'Show' : 'Hide',
+                                    onPressed: () => setState(
+                                      () => _obscure = !_obscure,
+                                    ),
+                                    icon: Icon(
+                                      _obscure
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                    ),
+                                  ),
+                                ),
+                                obscureText: _obscure,
+                                onSubmitted: (_) => _busy ? null : _login(),
+                              ),
+                              if (widget.session.lastError != null) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  widget.session.lastError!,
+                                  style: TextStyle(color: scheme.error),
+                                ),
+                              ],
+                              const SizedBox(height: 20),
+                              FilledButton(
+                                onPressed: _busy ? null : _login,
+                                child: _busy
+                                    ? SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: scheme.onPrimary,
+                                        ),
+                                      )
+                                    : const Text('Sign in'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
