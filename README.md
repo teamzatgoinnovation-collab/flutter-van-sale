@@ -35,3 +35,6 @@ flutter run
 
 - SQLite caches ERP pulls and queues writes with stable `client_id`
 - Flush requires ERP ack (`erp_name`) before dropping outbox rows
+- **Customers** are offline-first: local SQLite → `accounting.customers.sync`
+  creates Customer + Contact + Address + attachments (idempotent `zatgo_client_id`)
+- Customer outbox flushes **before** sales/collections so names resolve in ERPNext

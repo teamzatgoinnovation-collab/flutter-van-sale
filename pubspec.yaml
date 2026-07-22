@@ -17,6 +17,7 @@ dependencies:
   sqflite_common_ffi: ^2.3.4+4
   uuid: ^4.5.1
   shared_preferences: ^2.5.3
+  image_picker: ^1.1.2
   zatgo_dart_sdk:
     path: ../../../SharedSDK/dart_sdk
 

@@ -1,6 +1,8 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
 
+import '../customer/repositories/customer_repository.dart';
+import '../customer/validation/customer_validators.dart';
 import '../models/models.dart';
 import '../services/prefs.dart';
 import '../services/session.dart';
@@ -281,30 +283,29 @@ class VanSaleRepo {
     });
   }
 
-  /// Create ERPNext Customer (online). Returns customer name for the picker.
+  /// Offline-first customer create via [CustomerRepository].
   Future<String> createCustomer({
     required VanSaleSession session,
     required String customerName,
     String? phone,
+    String? addressLine1,
+    String? city,
+    String? country,
   }) async {
-    if (!session.connected) {
-      throw StateError('Sign in to create a customer in ERPNext.');
+    await customerRepository.loadDefaults(session);
+    final d = customerRepository.defaults;
+    final draft = CustomerDraft()
+      ..applyDefaults(d)
+      ..customerName = customerName
+      ..mobileNo = phone?.trim() ?? ''
+      ..addressLine1 = (addressLine1 ?? '').trim()
+      ..city = (city ?? '').trim()
+      ..country = (country ?? d.country).trim();
+    final created = await customerRepository.createLocal(draft);
+    if (session.connected) {
+      // Flush is owned by SyncService callers; leave queued if offline.
     }
-    final name = customerName.trim();
-    if (name.isEmpty) throw StateError('Customer name is required.');
-    final env = await session.store.callMethod(
-      ZatGoApiMethods.accountingCustomersCreate,
-      args: {
-        'customer_name': name,
-        if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
-      },
-    );
-    final data = env.data;
-    if (data is Map) {
-      final id = '${data['id'] ?? data['name'] ?? data['customer_name'] ?? name}';
-      if (id.isNotEmpty) return id;
-    }
-    return name;
+    return created.displayName;
   }
 
   /// Create ERPNext Item and optionally load qty onto the van warehouse.
@@ -333,10 +334,14 @@ class VanSaleRepo {
         'is_stock_item': 1,
       },
     );
-    final data = env.data is Map ? Map<String, dynamic>.from(env.data as Map) : {};
-    final createdCode = '${data['item_code'] ?? data['id'] ?? data['name'] ?? code}';
+    final data = env.data is Map
+        ? Map<String, dynamic>.from(env.data as Map)
+        : {};
+    final createdCode =
+        '${data['item_code'] ?? data['id'] ?? data['name'] ?? code}';
     final createdName = '${data['item_name'] ?? data['name'] ?? label}';
-    final rate = (data['rate'] as num?)?.toDouble() ??
+    final rate =
+        (data['rate'] as num?)?.toDouble() ??
         (data['price'] as num?)?.toDouble() ??
         unitPrice;
     final createdUom = '${data['uom'] ?? uom}';

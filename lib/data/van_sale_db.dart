@@ -9,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart'
 import 'package:uuid/uuid.dart';
 
 import '../models/models.dart';
+import '../customer/models/customer_model.dart';
 
 const _uuid = Uuid();
 
@@ -44,9 +45,27 @@ class VanSaleDb {
     final path = p.join(dir, 'van_sale.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
-        await db.execute('''
+        await _createV1(db);
+        await _createCustomersTable(db);
+        await _createCustomerIndexes(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await _createCustomersTable(db);
+          await _createCustomerIndexes(db);
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_sync_queue_status_created '
+            'ON sync_queue(status, created_at)',
+          );
+        }
+      },
+    );
+  }
+
+  Future<void> _createV1(Database db) async {
+    await db.execute('''
 CREATE TABLE route_stops (
   id TEXT PRIMARY KEY NOT NULL,
   customer_name TEXT NOT NULL,
@@ -58,7 +77,7 @@ CREATE TABLE route_stops (
   planned_at TEXT,
   updated_at TEXT NOT NULL
 )''');
-        await db.execute('''
+    await db.execute('''
 CREATE TABLE van_orders (
   id TEXT PRIMARY KEY NOT NULL,
   client_id TEXT NOT NULL UNIQUE,
@@ -70,7 +89,7 @@ CREATE TABLE van_orders (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 )''');
-        await db.execute('''
+    await db.execute('''
 CREATE TABLE collections (
   id TEXT PRIMARY KEY NOT NULL,
   client_id TEXT NOT NULL UNIQUE,
@@ -82,7 +101,7 @@ CREATE TABLE collections (
   collected_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 )''');
-        await db.execute('''
+    await db.execute('''
 CREATE TABLE van_stock (
   item_code TEXT PRIMARY KEY NOT NULL,
   item_name TEXT NOT NULL,
@@ -91,7 +110,7 @@ CREATE TABLE van_stock (
   unit_price REAL NOT NULL,
   updated_at TEXT NOT NULL
 )''');
-        await db.execute('''
+    await db.execute('''
 CREATE TABLE sync_queue (
   id TEXT PRIMARY KEY NOT NULL,
   client_id TEXT NOT NULL,
@@ -106,12 +125,78 @@ CREATE TABLE sync_queue (
   created_at TEXT NOT NULL,
   UNIQUE(entity_type, entity_id, op)
 )''');
-        await db.execute('''
+    await db.execute('''
 CREATE TABLE meta (
   key TEXT PRIMARY KEY NOT NULL,
   value TEXT NOT NULL
 )''');
-      },
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sync_queue_status_created '
+      'ON sync_queue(status, created_at)',
+    );
+  }
+
+  Future<void> _createCustomersTable(DatabaseExecutor db) async {
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS customers (
+  id TEXT PRIMARY KEY NOT NULL,
+  client_id TEXT NOT NULL UNIQUE,
+  erp_name TEXT,
+  sync_status TEXT NOT NULL,
+  last_error TEXT,
+  customer_name TEXT NOT NULL,
+  customer_name_ar TEXT,
+  customer_type TEXT NOT NULL,
+  customer_group TEXT NOT NULL,
+  territory TEXT NOT NULL,
+  tax_id TEXT,
+  cr_number TEXT,
+  customer_code TEXT,
+  website TEXT,
+  industry TEXT,
+  mobile_no TEXT NOT NULL,
+  phone TEXT,
+  email TEXT,
+  address_line1 TEXT NOT NULL,
+  address_line2 TEXT,
+  city TEXT NOT NULL,
+  state TEXT,
+  country TEXT NOT NULL,
+  postal_code TEXT,
+  google_map_url TEXT,
+  latitude REAL,
+  longitude REAL,
+  price_list TEXT,
+  sales_person TEXT,
+  credit_limit REAL,
+  payment_terms TEXT,
+  currency TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  remarks TEXT,
+  cr_image_path TEXT,
+  vat_certificate_path TEXT,
+  customer_photo_path TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)''');
+  }
+
+  Future<void> _createCustomerIndexes(DatabaseExecutor db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_sync ON customers(sync_status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(customer_name)',
+    );
+    // Partial uniqueness is enforced in repository (empty duplicates allowed).
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_mobile ON customers(mobile_no)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_tax ON customers(tax_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_cr ON customers(cr_number)',
     );
   }
 
@@ -259,18 +344,14 @@ CREATE TABLE meta (
   Future<void> upsertStockLine(StockLine line) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
-    await db.insert(
-      'van_stock',
-      {
-        'item_code': line.itemCode,
-        'item_name': line.itemName,
-        'qty': line.qty,
-        'uom': line.uom,
-        'unit_price': line.unitPrice,
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('van_stock', {
+      'item_code': line.itemCode,
+      'item_name': line.itemName,
+      'qty': line.qty,
+      'uom': line.uom,
+      'unit_price': line.unitPrice,
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> clearStops() async {
@@ -377,6 +458,206 @@ CREATE TABLE meta (
     );
   }
 
+  // --- customers ---
+
+  Future<void> upsertCustomer(CustomerModel c, {DatabaseExecutor? executor}) async {
+    final db = executor ?? await database;
+    await db.insert('customers', _customerToRow(c), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<CustomerModel?> getCustomer(String id) async {
+    final db = await database;
+    final rows = await db.query('customers', where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty) return null;
+    return _customerFromRow(rows.first);
+  }
+
+  Future<List<CustomerModel>> listCustomers({String? query, bool enabledOnly = true}) async {
+    final db = await database;
+    final where = <String>[];
+    final args = <Object?>[];
+    if (enabledOnly) {
+      where.add('enabled = 1');
+    }
+    if (query != null && query.trim().isNotEmpty) {
+      final q = '%${query.trim()}%';
+      where.add(
+        '(customer_name LIKE ? OR customer_name_ar LIKE ? OR mobile_no LIKE ? OR erp_name LIKE ? OR tax_id LIKE ?)',
+      );
+      args.addAll([q, q, q, q, q]);
+    }
+    final rows = await db.query(
+      'customers',
+      where: where.isEmpty ? null : where.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'customer_name COLLATE NOCASE ASC',
+    );
+    return rows.map(_customerFromRow).toList(growable: false);
+  }
+
+  Future<CustomerModel?> findCustomerDuplicate({
+    String? mobileNo,
+    String? taxId,
+    String? crNumber,
+    String? excludeId,
+  }) async {
+    final db = await database;
+    if (mobileNo != null && mobileNo.trim().isNotEmpty) {
+      final rows = await db.query(
+        'customers',
+        where: excludeId == null
+            ? 'mobile_no = ?'
+            : 'mobile_no = ? AND id != ?',
+        whereArgs: excludeId == null
+            ? [mobileNo.trim()]
+            : [mobileNo.trim(), excludeId],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) return _customerFromRow(rows.first);
+    }
+    if (taxId != null && taxId.trim().isNotEmpty) {
+      final rows = await db.query(
+        'customers',
+        where: excludeId == null ? 'tax_id = ?' : 'tax_id = ? AND id != ?',
+        whereArgs: excludeId == null
+            ? [taxId.trim()]
+            : [taxId.trim(), excludeId],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) return _customerFromRow(rows.first);
+    }
+    if (crNumber != null && crNumber.trim().isNotEmpty) {
+      final rows = await db.query(
+        'customers',
+        where: excludeId == null
+            ? 'cr_number = ?'
+            : 'cr_number = ? AND id != ?',
+        whereArgs: excludeId == null
+            ? [crNumber.trim()]
+            : [crNumber.trim(), excludeId],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) return _customerFromRow(rows.first);
+    }
+    return null;
+  }
+
+  Future<void> setCustomerSync({
+    required String id,
+    required SyncStatus status,
+    String? erpName,
+    String? lastError,
+  }) async {
+    final db = await database;
+    await db.update(
+      'customers',
+      {
+        'sync_status': status.name,
+        if (erpName != null) 'erp_name': erpName,
+        'last_error': lastError,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Map<String, Object?> _customerToRow(CustomerModel c) => {
+        'id': c.id,
+        'client_id': c.clientId,
+        'erp_name': c.erpName,
+        'sync_status': c.syncStatus.name,
+        'last_error': c.lastError,
+        'customer_name': c.customerName,
+        'customer_name_ar': c.customerNameAr,
+        'customer_type': c.customerType,
+        'customer_group': c.customerGroup,
+        'territory': c.territory,
+        'tax_id': c.taxId,
+        'cr_number': c.crNumber,
+        'customer_code': c.customerCode,
+        'website': c.website,
+        'industry': c.industry,
+        'mobile_no': c.mobileNo,
+        'phone': c.phone,
+        'email': c.email,
+        'address_line1': c.addressLine1,
+        'address_line2': c.addressLine2,
+        'city': c.city,
+        'state': c.state,
+        'country': c.country,
+        'postal_code': c.postalCode,
+        'google_map_url': c.googleMapUrl,
+        'latitude': c.latitude,
+        'longitude': c.longitude,
+        'price_list': c.priceList,
+        'sales_person': c.salesPerson,
+        'credit_limit': c.creditLimit,
+        'payment_terms': c.paymentTerms,
+        'currency': c.currency,
+        'enabled': c.enabled ? 1 : 0,
+        'remarks': c.remarks,
+        'cr_image_path': c.crImagePath,
+        'vat_certificate_path': c.vatCertificatePath,
+        'customer_photo_path': c.customerPhotoPath,
+        'created_at': c.createdAt.toIso8601String(),
+        'updated_at': c.updatedAt.toIso8601String(),
+      };
+
+  CustomerModel _customerFromRow(Map<String, Object?> r) {
+    return CustomerModel(
+      id: '${r['id']}',
+      clientId: '${r['client_id']}',
+      erpName: r['erp_name'] == null ? null : '${r['erp_name']}',
+      syncStatus: _syncStatusFrom('${r['sync_status']}'),
+      lastError: r['last_error'] == null ? null : '${r['last_error']}',
+      customerName: '${r['customer_name']}',
+      customerNameAr:
+          r['customer_name_ar'] == null ? null : '${r['customer_name_ar']}',
+      customerType: '${r['customer_type']}',
+      customerGroup: '${r['customer_group']}',
+      territory: '${r['territory']}',
+      taxId: r['tax_id'] == null ? null : '${r['tax_id']}',
+      crNumber: r['cr_number'] == null ? null : '${r['cr_number']}',
+      customerCode:
+          r['customer_code'] == null ? null : '${r['customer_code']}',
+      website: r['website'] == null ? null : '${r['website']}',
+      industry: r['industry'] == null ? null : '${r['industry']}',
+      mobileNo: '${r['mobile_no']}',
+      phone: r['phone'] == null ? null : '${r['phone']}',
+      email: r['email'] == null ? null : '${r['email']}',
+      addressLine1: '${r['address_line1']}',
+      addressLine2:
+          r['address_line2'] == null ? null : '${r['address_line2']}',
+      city: '${r['city']}',
+      state: r['state'] == null ? null : '${r['state']}',
+      country: '${r['country']}',
+      postalCode: r['postal_code'] == null ? null : '${r['postal_code']}',
+      googleMapUrl:
+          r['google_map_url'] == null ? null : '${r['google_map_url']}',
+      latitude: (r['latitude'] as num?)?.toDouble(),
+      longitude: (r['longitude'] as num?)?.toDouble(),
+      priceList: r['price_list'] == null ? null : '${r['price_list']}',
+      salesPerson: r['sales_person'] == null ? null : '${r['sales_person']}',
+      creditLimit: (r['credit_limit'] as num?)?.toDouble(),
+      paymentTerms:
+          r['payment_terms'] == null ? null : '${r['payment_terms']}',
+      currency: r['currency'] == null ? null : '${r['currency']}',
+      enabled: (r['enabled'] as num?)?.toInt() != 0,
+      remarks: r['remarks'] == null ? null : '${r['remarks']}',
+      crImagePath:
+          r['cr_image_path'] == null ? null : '${r['cr_image_path']}',
+      vatCertificatePath: r['vat_certificate_path'] == null
+          ? null
+          : '${r['vat_certificate_path']}',
+      customerPhotoPath: r['customer_photo_path'] == null
+          ? null
+          : '${r['customer_photo_path']}',
+      createdAt: DateTime.tryParse('${r['created_at']}') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse('${r['updated_at']}') ?? DateTime.now(),
+    );
+  }
+
   // --- sync queue ---
 
   Future<void> enqueue({
@@ -424,12 +705,13 @@ CREATE TABLE meta (
   Future<SyncQueueItem?> claimNext() async {
     final db = await database;
     return db.transaction((txn) async {
-      final rows = await txn.query(
-        'sync_queue',
-        where: "status = 'queued'",
-        orderBy: 'created_at ASC',
-        limit: 1,
-      );
+      // Customers first so sales/collections can resolve ERP names.
+      final rows = await txn.rawQuery('''
+SELECT * FROM sync_queue
+WHERE status = 'queued'
+ORDER BY CASE entity_type WHEN 'customer' THEN 0 ELSE 1 END, created_at ASC
+LIMIT 1
+''');
       if (rows.isEmpty) return null;
       final item = _queueFromRow(rows.first);
       await txn.update(

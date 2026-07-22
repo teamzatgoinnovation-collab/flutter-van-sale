@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../customer/models/customer_model.dart';
+import '../customer/pages/customer_form_page.dart';
+import '../customer/repositories/customer_repository.dart';
 import '../data/van_sale_repo.dart';
 import '../models/models.dart';
 import '../services/auth_scope.dart';
@@ -70,74 +73,21 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Future<String?> _createCustomerDialog() async {
     final session = _session;
-    if (session == null || !session.connected) {
+    if (session == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sign in to create a customer')),
+        const SnackBar(content: Text('Session unavailable')),
       );
       return null;
     }
-    final name = TextEditingController();
-    final phone = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('New customer'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: name,
-              decoration: const InputDecoration(labelText: 'Customer name'),
-              autofocus: true,
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: phone,
-              decoration: const InputDecoration(labelText: 'Phone (optional)'),
-              keyboardType: TextInputType.phone,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Create'),
-          ),
-        ],
+    // Offline-first form — works without connectivity.
+    final created = await Navigator.of(context).push<CustomerModel>(
+      MaterialPageRoute(
+        builder: (_) =>
+            CustomerFormPage(session: session, sync: widget.sync),
       ),
     );
-    if (ok != true || !mounted) {
-      name.dispose();
-      phone.dispose();
-      return null;
-    }
-    try {
-      final created = await vanSaleRepo.createCustomer(
-        session: session,
-        customerName: name.text,
-        phone: phone.text,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Customer created: $created')),
-        );
-      }
-      return created;
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
-      }
-      return null;
-    } finally {
-      name.dispose();
-      phone.dispose();
-    }
+    if (created == null) return null;
+    return created.displayName;
   }
 
   Future<StockLine?> _createProductDialog() async {
@@ -224,9 +174,9 @@ class _OrdersPageState extends State<OrdersPage> {
       return line;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
       return null;
     } finally {
@@ -241,11 +191,13 @@ class _OrdersPageState extends State<OrdersPage> {
     if (_saving) return;
     var stock = await vanSaleRepo.listStock();
     final stops = await vanSaleRepo.listStops();
+    final localCustomers = await customerRepository.list();
     if (!mounted) return;
 
     final customers = <String>[
       if (prefillCustomer != null && prefillCustomer.trim().isNotEmpty)
         prefillCustomer.trim(),
+      ...localCustomers.map((c) => c.displayName),
       ...stops.map((s) => s.customerName),
     ];
     var uniqueCustomers = <String>{...customers}.toList();
@@ -281,8 +233,9 @@ class _OrdersPageState extends State<OrdersPage> {
                       )
                     else
                       DropdownMenu<String>(
-                        initialSelection:
-                            uniqueCustomers.contains(customer) ? customer : null,
+                        initialSelection: uniqueCustomers.contains(customer)
+                            ? customer
+                            : null,
                         label: const Text('Customer'),
                         expandedInsets: EdgeInsets.zero,
                         dropdownMenuEntries: [
@@ -319,7 +272,9 @@ class _OrdersPageState extends State<OrdersPage> {
                           if (line == null) return;
                           setLocal(() {
                             stock = [
-                              ...stock.where((s) => s.itemCode != line.itemCode),
+                              ...stock.where(
+                                (s) => s.itemCode != line.itemCode,
+                              ),
                               line,
                             ];
                             qtys[line.itemCode] = qtys[line.itemCode] ?? 0;
@@ -413,9 +368,9 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
     if (lines.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pick at least one qty')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Pick at least one qty')));
       return;
     }
 
@@ -434,9 +389,9 @@ class _OrdersPageState extends State<OrdersPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
