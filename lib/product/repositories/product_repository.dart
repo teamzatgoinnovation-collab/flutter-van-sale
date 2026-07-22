@@ -33,7 +33,15 @@ class ProductRepository {
 
   Future<ProductDefaults> loadDefaults(VanSaleSession session) async {
     if (!session.connected) {
-      _defaults = ProductDefaults.fallback();
+      final kept = _defaultsCache.peek ??
+          (_defaults.itemGroups.isNotEmpty || _defaults.uoms.isNotEmpty
+              ? _defaults
+              : null);
+      if (kept != null) {
+        _defaults = kept;
+      } else {
+        _defaults = ProductDefaults.fallback();
+      }
       final wh = VanSalePrefs.instance.warehouse.trim();
       final company = VanSalePrefs.instance.company.trim();
       if (wh.isNotEmpty || company.isNotEmpty) {
@@ -41,8 +49,18 @@ class ProductRepository {
           itemGroup: _defaults.itemGroup,
           stockUom: _defaults.stockUom,
           salesUom: _defaults.salesUom,
-          company: company,
-          openingWarehouse: wh.isEmpty ? null : wh,
+          company: company.isNotEmpty ? company : _defaults.company,
+          defaultPriceList: _defaults.defaultPriceList,
+          openingWarehouse: wh.isNotEmpty ? wh : _defaults.openingWarehouse,
+          itemGroups: _defaults.itemGroups,
+          uoms: _defaults.uoms,
+          brands: _defaults.brands,
+          priceLists: _defaults.priceLists,
+          warehouses: _defaults.warehouses,
+          itemTaxTemplates: _defaults.itemTaxTemplates,
+          incomeAccounts: _defaults.incomeAccounts,
+          expenseAccounts: _defaults.expenseAccounts,
+          costCenters: _defaults.costCenters,
         );
       }
       return _defaults;

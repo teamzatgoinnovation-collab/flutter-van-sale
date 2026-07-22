@@ -188,7 +188,13 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                 ),
                 const SizedBox(height: 12),
                 _moreButton(),
-                if (_showMore) ...[
+                Visibility(
+                  visible: _showMore,
+                  maintainState: true,
+                  maintainAnimation: true,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                   const SizedBox(height: 16),
                   _section('Name & business'),
                   TextFormField(
@@ -199,6 +205,7 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                     onChanged: (v) => _draft.customerNameAr = v,
                   ),
                   TextFormField(
+                    initialValue: _draft.taxId,
                     decoration: const InputDecoration(
                       labelText: 'VAT Number (Tax ID)',
                       hintText: '15 digits starting with 3',
@@ -207,24 +214,28 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                     onChanged: (v) => _draft.taxId = v,
                   ),
                   TextFormField(
+                    initialValue: _draft.crNumber,
                     decoration: const InputDecoration(
                       labelText: 'Commercial Registration (CR)',
                     ),
                     onChanged: (v) => _draft.crNumber = v,
                   ),
                   TextFormField(
+                    initialValue: _draft.customerCode,
                     decoration: const InputDecoration(
                       labelText: 'Customer Code',
                     ),
                     onChanged: (v) => _draft.customerCode = v,
                   ),
                   TextFormField(
+                    initialValue: _draft.barcode,
                     decoration: const InputDecoration(
                       labelText: 'Barcode / loyalty card',
                     ),
                     onChanged: (v) => _draft.barcode = v,
                   ),
                   TextFormField(
+                    initialValue: _draft.website,
                     decoration: const InputDecoration(labelText: 'Website'),
                     keyboardType: TextInputType.url,
                     onChanged: (v) => _draft.website = v,
@@ -239,11 +250,13 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                   const SizedBox(height: 16),
                   _section('More contact'),
                   TextFormField(
+                    initialValue: _draft.phone,
                     decoration: const InputDecoration(labelText: 'Phone Number'),
                     keyboardType: TextInputType.phone,
                     onChanged: (v) => _draft.phone = v,
                   ),
                   TextFormField(
+                    initialValue: _draft.email,
                     decoration: const InputDecoration(labelText: 'Email'),
                     keyboardType: TextInputType.emailAddress,
                     onChanged: (v) => _draft.email = v,
@@ -251,20 +264,24 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                   const SizedBox(height: 16),
                   _section('More address'),
                   TextFormField(
+                    initialValue: _draft.addressLine2,
                     decoration: const InputDecoration(
                       labelText: 'Address Line 2',
                     ),
                     onChanged: (v) => _draft.addressLine2 = v,
                   ),
                   TextFormField(
+                    initialValue: _draft.state,
                     decoration: const InputDecoration(labelText: 'State'),
                     onChanged: (v) => _draft.state = v,
                   ),
                   TextFormField(
+                    initialValue: _draft.postalCode,
                     decoration: const InputDecoration(labelText: 'Postal Code'),
                     onChanged: (v) => _draft.postalCode = v,
                   ),
                   TextFormField(
+                    initialValue: _draft.googleMapUrl,
                     decoration: const InputDecoration(
                       labelText: 'Google Map Location (URL)',
                     ),
@@ -274,6 +291,7 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                     children: [
                       Expanded(
                         child: TextFormField(
+                          initialValue: _draft.latitude?.toString() ?? '',
                           decoration: const InputDecoration(
                             labelText: 'Latitude',
                           ),
@@ -288,6 +306,7 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: TextFormField(
+                          initialValue: _draft.longitude?.toString() ?? '',
                           decoration: const InputDecoration(
                             labelText: 'Longitude',
                           ),
@@ -318,6 +337,7 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                     onChanged: (v) => setState(() => _draft.salesPerson = v),
                   ),
                   TextFormField(
+                    initialValue: _draft.creditLimit?.toString() ?? '',
                     decoration: const InputDecoration(labelText: 'Credit Limit'),
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -348,6 +368,7 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                     onChanged: (v) => setState(() => _draft.enabled = v),
                   ),
                   TextFormField(
+                    initialValue: _draft.remarks,
                     decoration: const InputDecoration(labelText: 'Remarks'),
                     maxLines: 3,
                     onChanged: (v) => _draft.remarks = v,
@@ -376,7 +397,9 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                     onClear: () =>
                         setState(() => _draft.customerPhotoPath = null),
                   ),
-                ],
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: _saving ? null : _save,
@@ -429,6 +452,11 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
     final selected = items.contains(value)
         ? value
         : (allowEmpty ? '' : items.first);
+    if (selected != value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) onChanged(selected);
+      });
+    }
     return DropdownButtonFormField<String>(
       initialValue: selected,
       decoration: InputDecoration(labelText: label),

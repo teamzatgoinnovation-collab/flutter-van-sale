@@ -81,9 +81,7 @@ class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
   void _syncGate() {
     final authed = _authed;
     if (_showLogin == !authed) {
-      if (authed) {
-        _afterAuth();
-      }
+      // Already showing the correct root — ignore session noise.
       return;
     }
     setState(() => _showLogin = !authed);

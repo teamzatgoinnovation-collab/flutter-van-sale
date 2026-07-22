@@ -157,6 +157,7 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
     );
     if (created == null || !mounted) return;
     await customerRepository.markRecent(created.id);
+    if (!mounted) return;
     if (widget.selectMode) {
       Navigator.of(context).pop(created);
     } else {

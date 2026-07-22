@@ -11,11 +11,13 @@ class TtlMemoryCache<T> {
     final v = _value;
     if (v == null || stored == null) return null;
     if (DateTime.now().difference(stored) > ttl) {
-      clear();
       return null;
     }
     return v;
   }
+
+  /// Last stored value even after TTL expiry (for offline pick-list fallback).
+  T? get peek => _value;
 
   void set(T value) {
     _value = value;

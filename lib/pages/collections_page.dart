@@ -62,6 +62,11 @@ class _CollectionsPageState extends State<CollectionsPage> {
     setState(() => _rows = rows);
   }
 
+  bool _isToday(DateTime dt) {
+    final now = DateTime.now();
+    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+  }
+
   Future<void> _collect({String? prefillCustomer}) async {
     if (_saving) return;
     final session = VanSaleAuthScope.maybeOf(context)?.session;
@@ -84,149 +89,163 @@ class _CollectionsPageState extends State<CollectionsPage> {
     final amount = TextEditingController();
     var method = 'Cash';
 
-    if (!mounted) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Record collection'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Customer',
-                  border: OutlineInputBorder(),
-                ),
-                child: Text(
-                  customer.isEmpty ? 'Search customers…' : customer,
-                  style: TextStyle(
-                    color: customer.isEmpty ? Theme.of(ctx).hintColor : null,
+    try {
+      if (!mounted) return;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setLocal) => AlertDialog(
+            title: const Text('Record collection'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Customer',
+                    border: OutlineInputBorder(),
+                  ),
+                  child: Text(
+                    customer.isEmpty ? 'Search customers…' : customer,
+                    style: TextStyle(
+                      color: customer.isEmpty ? Theme.of(ctx).hintColor : null,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.tonalIcon(
-                  onPressed: () async {
-                    final sess = session ?? widget.sync.session;
-                    final picked = await Navigator.of(
-                      context,
-                      rootNavigator: true,
-                    ).push<CustomerModel>(
-                      MaterialPageRoute(
-                        fullscreenDialog: true,
-                        builder: (_) => CustomerSearchPage(
-                          session: sess,
-                          sync: widget.sync,
-                          selectMode: true,
-                          initialQuery: customer,
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.tonalIcon(
+                    onPressed: () async {
+                      final sess = session ?? widget.sync.session;
+                      final picked = await Navigator.of(
+                        context,
+                        rootNavigator: true,
+                      ).push<CustomerModel>(
+                        MaterialPageRoute(
+                          fullscreenDialog: true,
+                          builder: (_) => CustomerSearchPage(
+                            session: sess,
+                            sync: widget.sync,
+                            selectMode: true,
+                            initialQuery: customer,
+                          ),
                         ),
-                      ),
-                    );
-                    if (picked == null) return;
-                    setLocal(() {
-                      selected = picked;
-                      customer = picked.displayName;
-                    });
-                  },
-                  icon: const Icon(Icons.search, size: 18),
-                  label: const Text('Search customer'),
+                      );
+                      if (picked == null) return;
+                      setLocal(() {
+                        selected = picked;
+                        customer = picked.displayName;
+                      });
+                    },
+                    icon: const Icon(Icons.search, size: 18),
+                    label: const Text('Search customer'),
+                  ),
                 ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: amount,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(labelText: 'Amount'),
+                ),
+                const SizedBox(height: 10),
+                DropdownMenu<String>(
+                  initialSelection: method,
+                  label: const Text('Method'),
+                  expandedInsets: EdgeInsets.zero,
+                  dropdownMenuEntries: const [
+                    DropdownMenuEntry(value: 'Cash', label: 'Cash'),
+                    DropdownMenuEntry(value: 'Card', label: 'Card'),
+                    DropdownMenuEntry(value: 'Transfer', label: 'Transfer'),
+                  ],
+                  onSelected: (v) => setLocal(() => method = v ?? 'Cash'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
               ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: amount,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Amount'),
-              ),
-              const SizedBox(height: 10),
-              DropdownMenu<String>(
-                initialSelection: method,
-                label: const Text('Method'),
-                expandedInsets: EdgeInsets.zero,
-                dropdownMenuEntries: const [
-                  DropdownMenuEntry(value: 'Cash', label: 'Cash'),
-                  DropdownMenuEntry(value: 'Card', label: 'Card'),
-                  DropdownMenuEntry(value: 'Transfer', label: 'Transfer'),
-                ],
-                onSelected: (v) => setLocal(() => method = v ?? 'Cash'),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save'),
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Save'),
-            ),
-          ],
         ),
-      ),
-    );
+      );
 
-    if (ok != true || !mounted) return;
-    if (customer.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pick a customer')),
-      );
-      amount.dispose();
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      if (selected != null) {
-        await customerRepository.markRecent(selected!.id);
+      if (ok != true || !mounted) return;
+      if (customer.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pick a customer')),
+        );
+        return;
       }
-      String? salesInvoice;
-      final orders = await vanSaleRepo.listOrders();
-      for (final o in orders) {
-        if (o.customerName == customer.trim() &&
-            o.erpName != null &&
-            o.erpName!.isNotEmpty &&
-            o.syncStatus == SyncStatus.uploaded) {
-          salesInvoice = o.erpName;
-          break;
+      final parsed = double.tryParse(amount.text.trim());
+      if (parsed == null || parsed <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a valid amount')),
+        );
+        return;
+      }
+
+      setState(() => _saving = true);
+      try {
+        if (selected != null) {
+          await customerRepository.markRecent(selected!.id);
         }
-      }
-      await vanSaleRepo.recordCollection(
-        customerName: customer.trim(),
-        amount: double.tryParse(amount.text) ?? 0,
-        method: method,
-        salesInvoice: salesInvoice,
-        session: widget.sync.session,
-      );
-      if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
-        await widget.sync.flush(pullTrips: false);
-      }
-      await _load();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
+        String? salesInvoice;
+        final orders = await vanSaleRepo.listOrders();
+        for (final o in orders) {
+          if (o.customerName == customer.trim() &&
+              o.erpName != null &&
+              o.erpName!.isNotEmpty &&
+              o.syncStatus == SyncStatus.uploaded) {
+            salesInvoice = o.erpName;
+            break;
+          }
+        }
+        await vanSaleRepo.recordCollection(
+          customerName: customer.trim(),
+          amount: parsed,
+          method: method,
+          salesInvoice: salesInvoice,
+          session: widget.sync.session,
+        );
+        if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
+          try {
+            await widget.sync.flush(pullTrips: false);
+          } catch (_) {}
+        }
+        await _load();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('$e')));
+        }
+      } finally {
+        if (mounted) setState(() => _saving = false);
       }
     } finally {
       amount.dispose();
-      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final total = _rows.fold<double>(0, (s, c) => s + c.amount);
+    final todayTotal = _rows
+        .where((c) => _isToday(c.collectedAt))
+        .fold<double>(0, (s, c) => s + c.amount);
     final theme = Theme.of(context);
 
     return PageScaffold(
       title: 'Cash',
       subtitle: 'Payment Entry · safe client_id sync',
       onOpenMenu: widget.onOpenMenu,
-      // IndexedStack keeps Sell+Cash FABs mounted; disable heroes so route
-      // pushes from dialogs cannot collide.
       floatingActionButton: HeroMode(
         enabled: false,
         child: FloatingActionButton.extended(
@@ -248,7 +267,7 @@ class _CollectionsPageState extends State<CollectionsPage> {
                 ),
                 title: const Text('Collected today'),
                 trailing: Text(
-                  money(total),
+                  money(todayTotal),
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -271,19 +290,11 @@ class _CollectionsPageState extends State<CollectionsPage> {
                       return Card(
                         clipBehavior: Clip.antiAlias,
                         child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 6,
-                          ),
                           title: Text(
                             c.customerName,
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          subtitle: Text(
-                            '${c.method} · ${timeLabel(c.collectedAt)}\n'
-                            '${c.clientId}',
-                          ),
-                          isThreeLine: true,
+                          subtitle: Text('${c.method} · ${c.clientId}'),
                           trailing: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.end,

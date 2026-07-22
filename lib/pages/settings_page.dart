@@ -81,7 +81,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (siteChanged) {
       widget.sync.stopBackgroundSync();
+      if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
+      final nav = Navigator.of(context);
       await widget.session.logout();
       messenger.showSnackBar(
         SnackBar(
@@ -90,9 +92,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       );
-      if (mounted) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      }
+      nav.popUntil((route) => route.isFirst);
       return;
     }
 

@@ -146,6 +146,7 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
     );
     if (created == null || !mounted) return;
     await productRepository.markRecent(created.id);
+    if (!mounted) return;
     if (widget.selectMode) {
       Navigator.of(context).pop(created);
     } else {

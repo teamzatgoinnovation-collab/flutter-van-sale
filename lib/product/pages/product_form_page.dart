@@ -187,16 +187,24 @@ class _ProductFormPageState extends State<ProductFormPage> {
                 ),
                 const SizedBox(height: 12),
                 _moreButton(),
-                if (_showMore) ...[
+                Visibility(
+                  visible: _showMore,
+                  maintainState: true,
+                  maintainAnimation: true,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                   const SizedBox(height: 16),
                   _section('Details'),
                   TextFormField(
+                    initialValue: _draft.itemNameAr,
                     decoration: const InputDecoration(
                       labelText: 'Item Name Arabic',
                     ),
                     onChanged: (v) => _draft.itemNameAr = v,
                   ),
                   TextFormField(
+                    initialValue: _draft.description,
                     decoration: const InputDecoration(labelText: 'Description'),
                     maxLines: 2,
                     onChanged: (v) => _draft.description = v,
@@ -209,14 +217,17 @@ class _ProductFormPageState extends State<ProductFormPage> {
                     onChanged: (v) => setState(() => _draft.brand = v),
                   ),
                   TextFormField(
+                    initialValue: _draft.barcode,
                     decoration: const InputDecoration(labelText: 'Barcode'),
                     onChanged: (v) => _draft.barcode = v,
                   ),
                   TextFormField(
+                    initialValue: _draft.sku,
                     decoration: const InputDecoration(labelText: 'SKU'),
                     onChanged: (v) => _draft.sku = v,
                   ),
                   TextFormField(
+                    initialValue: _draft.hsCode,
                     decoration: const InputDecoration(labelText: 'HS Code'),
                     onChanged: (v) => _draft.hsCode = v,
                   ),
@@ -351,7 +362,9 @@ class _ProductFormPageState extends State<ProductFormPage> {
                       icon: const Icon(Icons.collections_outlined),
                     ),
                   ),
-                ],
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: _saving ? null : _save,
@@ -402,6 +415,11 @@ class _ProductFormPageState extends State<ProductFormPage> {
     final selected = items.contains(value)
         ? value
         : (allowEmpty ? '' : items.first);
+    if (selected != value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) onChanged(selected);
+      });
+    }
     return DropdownButtonFormField<String>(
       initialValue: selected,
       decoration: InputDecoration(labelText: label),

@@ -48,8 +48,14 @@ class VanSaleDb {
       path,
       version: 6,
       onConfigure: (db) async {
-        // Reduce SQLITE_BUSY flakes under concurrent readers/writers.
-        await db.execute('PRAGMA busy_timeout = 5000');
+        // Android sqflite rejects execute() for busy_timeout; rawQuery works.
+        try {
+          await db.rawQuery('PRAGMA busy_timeout = 5000');
+        } catch (_) {
+          try {
+            await db.execute('PRAGMA busy_timeout = 5000');
+          } catch (_) {}
+        }
         await db.execute('PRAGMA foreign_keys = ON');
       },
       onCreate: (db, version) async {
@@ -1708,7 +1714,9 @@ DELETE FROM sync_logs WHERE id NOT IN (
     final queuedOrders = orders
         .where((o) => o.syncStatus != SyncStatus.uploaded)
         .length;
-    final collected = collections.fold<double>(0, (s, c) => s + c.amount);
+    final collected = collections
+        .where(_isLocalDay)
+        .fold<double>(0, (s, c) => s + c.amount);
     return DaySummary(
       stopsTotal: stops.length,
       stopsDone: done,
@@ -1805,5 +1813,11 @@ DELETE FROM sync_logs WHERE id NOT IN (
       'retry' => SyncStatus.retry,
       _ => SyncStatus.pending,
     };
+  }
+
+  bool _isLocalDay(Collection c) {
+    final now = DateTime.now();
+    final d = c.collectedAt;
+    return d.year == now.year && d.month == now.month && d.day == now.day;
   }
 }

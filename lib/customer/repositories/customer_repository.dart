@@ -34,7 +34,13 @@ class CustomerRepository {
 
   Future<CustomerDefaults> loadDefaults(VanSaleSession session) async {
     if (!session.connected) {
-      _defaults = CustomerDefaults.fallback();
+      final kept = _defaultsCache.peek ??
+          (_defaults.customerGroups.isNotEmpty ? _defaults : null);
+      if (kept != null) {
+        _defaults = kept;
+      } else {
+        _defaults = CustomerDefaults.fallback();
+      }
       final company = VanSalePrefs.instance.company.trim();
       if (company.isNotEmpty) {
         _defaults = CustomerDefaults(
@@ -45,6 +51,13 @@ class CustomerRepository {
           country: _defaults.country,
           defaultCurrency: _defaults.defaultCurrency,
           defaultPriceList: _defaults.defaultPriceList,
+          customerGroups: _defaults.customerGroups,
+          territories: _defaults.territories,
+          industries: _defaults.industries,
+          priceLists: _defaults.priceLists,
+          salesPersons: _defaults.salesPersons,
+          paymentTermsTemplates: _defaults.paymentTermsTemplates,
+          currencies: _defaults.currencies,
         );
       }
       return _defaults;

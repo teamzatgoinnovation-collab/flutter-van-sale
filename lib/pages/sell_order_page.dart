@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../customer/models/customer_model.dart';
 import '../customer/pages/customer_form_page.dart';
@@ -128,7 +127,12 @@ class _SellOrderPageState extends State<SellOrderPage> {
   void _setQty(StockLine stock, double qty) {
     setState(() {
       _banner = null;
-      final next = qty < 0 ? 0.0 : qty;
+      var next = qty < 0 ? 0.0 : qty;
+      if (!VanSalePolicy.instance.allowNegativeStock && next > stock.qty) {
+        next = stock.qty;
+        _banner =
+            'Only ${money(stock.qty)} ${stock.uom} left for ${stock.itemName}';
+      }
       if (next <= 0) {
         _cart.remove(stock.itemCode);
       } else {
@@ -139,16 +143,7 @@ class _SellOrderPageState extends State<SellOrderPage> {
 
   void _bump(StockLine stock, double delta) {
     final current = _cart[stock.itemCode]?.qty ?? 0;
-    var next = current + delta;
-    if (next < 0) next = 0;
-    if (!VanSalePolicy.instance.allowNegativeStock && next > stock.qty) {
-      next = stock.qty;
-      HapticFeedback.lightImpact();
-      setState(() {
-        _banner = 'Only ${money(stock.qty)} ${stock.uom} left for ${stock.itemName}';
-      });
-    }
-    _setQty(stock, next);
+    _setQty(stock, current + delta);
   }
 
   Future<void> _pickCustomer() async {
@@ -210,9 +205,15 @@ class _SellOrderPageState extends State<SellOrderPage> {
           uom: picked.stockUom,
           unitPrice: picked.displayPrice,
         );
+    if (existing == null) {
+      await vanSaleRepo.db.upsertStockLine(line);
+    }
     if (!mounted) return;
     setState(() {
-      final known = [..._vanStock.where((s) => s.itemCode != line.itemCode), line];
+      final known = [
+        ..._vanStock.where((s) => s.itemCode != line.itemCode),
+        line,
+      ];
       _vanStock = known;
     });
     final current = _cart[line.itemCode]?.qty ?? 0;
@@ -228,20 +229,23 @@ class _SellOrderPageState extends State<SellOrderPage> {
       ),
     );
     if (created == null || !mounted) return;
-    final line = await vanSaleRepo.getStock(created.displayCode) ??
-        await vanSaleRepo.getStock(created.itemCode) ??
-        StockLine(
-          itemCode: created.displayCode,
-          itemName: created.itemName,
-          qty: created.openingQuantity,
-          uom: created.stockUom,
-          unitPrice: created.sellingRate,
-        );
+    var line = await vanSaleRepo.getStock(created.displayCode) ??
+        await vanSaleRepo.getStock(created.itemCode);
+    if (line == null) {
+      line = StockLine(
+        itemCode: created.displayCode,
+        itemName: created.itemName,
+        qty: created.openingQuantity,
+        uom: created.stockUom,
+        unitPrice: created.sellingRate,
+      );
+      await vanSaleRepo.db.upsertStockLine(line);
+    }
     if (!mounted) return;
     setState(() {
       _vanStock = [
-        ..._vanStock.where((s) => s.itemCode != line.itemCode),
-        line,
+        ..._vanStock.where((s) => s.itemCode != line!.itemCode),
+        line!,
       ];
     });
     _setQty(line, 1);
@@ -290,8 +294,11 @@ class _SellOrderPageState extends State<SellOrderPage> {
         lines: lines,
         session: widget.sync.session,
       );
+      // Local sale succeeded — never re-queue on flush failure.
       if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
-        await widget.sync.flush(pullTrips: false);
+        try {
+          await widget.sync.flush(pullTrips: false);
+        } catch (_) {}
       }
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -770,7 +777,7 @@ class _QtyStepperState extends State<_QtyStepper> {
   @override
   void didUpdateWidget(covariant _QtyStepper oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.qty != widget.qty && !_focus.hasFocus) {
+    if (oldWidget.qty != widget.qty) {
       final next = money(widget.qty);
       if (_controller.text != next) {
         _controller.text = next;
@@ -825,7 +832,11 @@ class _QtyStepperState extends State<_QtyStepper> {
               ),
               onChanged: (v) {
                 final parsed = double.tryParse(v.trim());
-                if (parsed != null) widget.onQtyChanged(parsed);
+                if (v.trim().isEmpty) {
+                  widget.onQtyChanged(0);
+                } else if (parsed != null) {
+                  widget.onQtyChanged(parsed);
+                }
               },
             ),
           ),
