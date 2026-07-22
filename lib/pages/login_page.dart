@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
 
+import '../services/prefs.dart';
 import '../services/session.dart';
 
 class LoginPage extends StatefulWidget {
@@ -15,6 +16,7 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage>
     with SingleTickerProviderStateMixin {
+  late final TextEditingController _site;
   final _usr = TextEditingController();
   final _pwd = TextEditingController();
   bool _busy = false;
@@ -26,6 +28,8 @@ class _LoginPageState extends State<LoginPage>
   @override
   void initState() {
     super.initState();
+    _site = TextEditingController(text: VanSalePrefs.instance.siteUrl);
+    widget.session.updateBaseUrl(_site.text);
     _enter = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 480),
@@ -40,6 +44,7 @@ class _LoginPageState extends State<LoginPage>
 
   @override
   void dispose() {
+    _site.dispose();
     _usr.dispose();
     _pwd.dispose();
     _enter.dispose();
@@ -48,6 +53,9 @@ class _LoginPageState extends State<LoginPage>
 
   Future<void> _login() async {
     setState(() => _busy = true);
+    final url = _site.text.trim();
+    await VanSalePrefs.instance.setSiteUrl(url);
+    widget.session.updateBaseUrl(url);
     final result = await widget.session.login(
       usr: _usr.text.trim(),
       pwd: _pwd.text,
@@ -70,17 +78,13 @@ class _LoginPageState extends State<LoginPage>
 
   Future<void> _ping() async {
     setState(() => _busy = true);
+    widget.session.updateBaseUrl(_site.text.trim());
     final result = await widget.session.ping();
     if (!mounted) return;
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(result.message)),
     );
-  }
-
-  void _offline() {
-    widget.session.continueOffline();
-    widget.onAuthed();
   }
 
   @override
@@ -154,7 +158,7 @@ class _LoginPageState extends State<LoginPage>
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Route sales with SQLite offline and safe sync.',
+                        'Sign in to ERPNext. Route, stock, and sales come from the site.',
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: scheme.onSurfaceVariant,
@@ -176,6 +180,16 @@ class _LoginPageState extends State<LoginPage>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              TextField(
+                                controller: _site,
+                                decoration: const InputDecoration(
+                                  labelText: 'Site URL',
+                                  prefixIcon: Icon(Icons.link),
+                                ),
+                                keyboardType: TextInputType.url,
+                                autocorrect: false,
+                              ),
+                              const SizedBox(height: 12),
                               TextField(
                                 controller: _usr,
                                 decoration: const InputDecoration(
@@ -227,11 +241,6 @@ class _LoginPageState extends State<LoginPage>
                                     : const Text('Sign in'),
                               ),
                               const SizedBox(height: 8),
-                              OutlinedButton(
-                                onPressed: _busy ? null : _offline,
-                                child: const Text('Continue offline'),
-                              ),
-                              const SizedBox(height: 4),
                               TextButton(
                                 onPressed: _busy ? null : _ping,
                                 child: const Text('Test site'),

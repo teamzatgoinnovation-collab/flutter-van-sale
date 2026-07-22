@@ -4,6 +4,7 @@ import 'data/van_sale_db.dart';
 import 'data/van_sale_repo.dart';
 import 'pages/login_page.dart';
 import 'pages/shell.dart';
+import 'services/prefs.dart';
 import 'services/session.dart';
 import 'services/sync_service.dart';
 import 'theme.dart';
@@ -11,8 +12,11 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initVanSaleSqflite();
+  await VanSalePrefs.instance.init();
   await vanSaleRepo.init();
-  runApp(VanSaleApp(session: VanSaleSession()));
+  final session = VanSaleSession();
+  session.updateBaseUrl(VanSalePrefs.instance.siteUrl);
+  runApp(VanSaleApp(session: session));
 }
 
 class VanSaleApp extends StatefulWidget {
@@ -28,8 +32,7 @@ class _VanSaleAppState extends State<VanSaleApp> {
   bool _showLogin = true;
   late final SyncService _sync;
 
-  bool get _authed =>
-      widget.session.connected || widget.session.allowMockWithoutLogin;
+  bool get _authed => widget.session.connected;
 
   @override
   void initState() {

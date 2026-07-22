@@ -1,18 +1,21 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:van_sale/data/van_sale_db.dart';
 import 'package:van_sale/data/van_sale_repo.dart';
 import 'package:van_sale/models/models.dart';
+import 'package:van_sale/services/prefs.dart';
 
 void main() {
-  setUpAll(() {
+  setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
+    await VanSalePrefs.instance.init();
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   });
 
   test('createOrder persists entity + outbox with same client_id', () async {
     final db = VanSaleDb.instance;
-    // Force fresh DB file for test process
     final database = await db.database;
     await database.delete('sync_queue');
     await database.delete('van_orders');
@@ -20,7 +23,16 @@ void main() {
     await database.delete('van_stock');
     await database.delete('route_stops');
     await database.delete('meta');
-    await db.seedIfNeeded();
+
+    await db.replaceStock(const [
+      StockLine(
+        itemCode: 'SKU-WATER-1.5',
+        itemName: 'Water 1.5L',
+        qty: 48,
+        uom: 'Nos',
+        unitPrice: 2.5,
+      ),
+    ]);
 
     final repo = VanSaleRepo(db);
     await repo.init();
@@ -48,7 +60,6 @@ void main() {
     expect(create.clientId, order.clientId);
     expect(create.args['client_id'], order.clientId);
 
-    // Second enqueue for same create is ignored (no duplicate).
     await db.enqueue(
       clientId: order.clientId,
       entityType: 'van_order',

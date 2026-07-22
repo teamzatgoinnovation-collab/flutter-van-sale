@@ -2,10 +2,11 @@ import 'package:sqflite/sqflite.dart';
 import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
 
 import '../models/models.dart';
+import '../services/prefs.dart';
 import '../services/session.dart';
 import 'van_sale_db.dart';
 
-/// Local-first VanSale repository. All reads/writes go through SQLite.
+/// Local-first VanSale repository backed by ERPNext via go_van APIs.
 class VanSaleRepo {
   VanSaleRepo(this.db);
 
@@ -34,7 +35,6 @@ class VanSaleRepo {
 
   Future<Map<String, int>> syncCounts() => db.syncCounts();
 
-  /// Pull trips when connected; never wipe commercial docs. Seed stays if empty.
   Future<void> refreshFromErpnext(VanSaleSession session) async {
     if (!session.connected) return;
     try {
@@ -43,27 +43,64 @@ class VanSaleRepo {
         ZatGoApiMethods.goVanTripsList,
         args: {'page': 1, 'page_size': 100},
       );
-      final rows = env.data is List ? env.data as List : const [];
-      if (rows.isEmpty) return;
-
+      final rows = _asList(env.data);
+      final existingStatuses = <String, VisitStatus>{};
+      for (final s in await db.listStops()) {
+        existingStatuses[s.id] = s.visitStatus;
+      }
+      await db.clearStops();
       for (var i = 0; i < rows.length; i++) {
         final map = Map<String, dynamic>.from(rows[i] as Map);
         final id = '${map['name'] ?? map['id'] ?? 'trip-$i'}';
-        final existing = await db.visitStatusOf(id);
+        final statusRaw = '${map['status'] ?? ''}';
+        final fromErp = _visitFromErp(statusRaw);
         await db.upsertStop(
           RouteStop(
             id: id,
-            customerName: '${map['customer'] ?? map['title'] ?? 'Stop ${i + 1}'}',
+            customerName:
+                '${map['customer'] ?? map['title'] ?? 'Stop ${i + 1}'}',
             address: '${map['address'] ?? ''}',
-            sequence: i + 1,
+            sequence: (map['sequence'] as num?)?.toInt() ?? i + 1,
             lat: double.tryParse('${map['lat'] ?? ''}') ?? 0,
             lng: double.tryParse('${map['lng'] ?? ''}') ?? 0,
-            plannedAt: DateTime.now(),
-            visitStatus: existing ?? VisitStatus.planned,
+            plannedAt: DateTime.tryParse('${map['planned_at'] ?? ''}') ??
+                DateTime.now(),
+            visitStatus: fromErp ?? existingStatuses[id] ?? VisitStatus.planned,
           ),
         );
       }
       await db.metaSet('last_pull_at', DateTime.now().toIso8601String());
+      await db.metaSet('route_name', 'ERPNext · ZG Trip');
+      routeName = 'ERPNext · ZG Trip';
+
+      final warehouse = VanSalePrefs.instance.warehouse.trim();
+      if (warehouse.isNotEmpty) {
+        final stockEnv = await session.store.callMethod(
+          ZatGoApiMethods.goVanStockList,
+          args: {
+            'warehouse': warehouse,
+            'page': 1,
+            'page_size': 200,
+          },
+        );
+        final stockRows = _asList(stockEnv.data);
+        final lines = <StockLine>[
+          for (final raw in stockRows)
+            if (raw is Map)
+              StockLine(
+                itemCode: '${raw['item_code'] ?? ''}',
+                itemName: '${raw['item_name'] ?? raw['item_code'] ?? ''}',
+                qty: (raw['qty'] as num?)?.toDouble() ?? 0,
+                uom: '${raw['uom'] ?? 'Nos'}',
+                unitPrice: (raw['unit_price'] as num?)?.toDouble() ??
+                    (raw['rate'] as num?)?.toDouble() ??
+                    0,
+              ),
+        ];
+        await db.replaceStock(
+          lines.where((l) => l.itemCode.isNotEmpty).toList(),
+        );
+      }
     } catch (_) {
       // Keep local SQLite state on pull failure.
     }
@@ -79,6 +116,8 @@ class VanSaleRepo {
     final amount = lines.fold<double>(0, (s, l) => s + l.amount);
     final clientId = newClientId();
     final id = newLocalId('ord');
+    final warehouse = VanSalePrefs.instance.warehouse.trim();
+    final company = VanSalePrefs.instance.company.trim();
     final order = VanOrder(
       id: id,
       clientId: clientId,
@@ -114,12 +153,15 @@ class VanSaleRepo {
         entityType: 'van_order',
         entityId: id,
         op: 'create',
-        method: 'zatgo_core.api.v1.go_van.orders.create',
+        method: ZatGoApiMethods.goVanOrdersCreate,
         args: {
           'client_id': clientId,
-          'customer_name': customerName,
-          'items': [for (final l in lines) l.toJson()],
-          'amount': amount,
+          'customer': customerName,
+          'items': [
+            for (final l in lines) {...l.toJson(), 'rate': l.unitPrice},
+          ],
+          if (warehouse.isNotEmpty) 'warehouse': warehouse,
+          if (company.isNotEmpty) 'company': company,
         },
         executor: txn,
       );
@@ -131,6 +173,7 @@ class VanSaleRepo {
     required String customerName,
     required double amount,
     required String method,
+    String? salesInvoice,
   }) async {
     if (amount <= 0) throw StateError('Collection amount must be positive.');
     final clientId = newClientId();
@@ -153,12 +196,14 @@ class VanSaleRepo {
         entityType: 'collection',
         entityId: id,
         op: 'create',
-        method: 'zatgo_core.api.v1.go_van.collections.create',
+        method: ZatGoApiMethods.goVanCollectionsCreate,
         args: {
           'client_id': clientId,
-          'customer_name': customerName,
+          'customer': customerName,
           'amount': amount,
           'method': method,
+          if (salesInvoice != null && salesInvoice.isNotEmpty)
+            'sales_invoice': salesInvoice,
         },
         executor: txn,
       );
@@ -188,7 +233,7 @@ class VanSaleRepo {
         entityType: 'route_stop',
         entityId: id,
         op: 'update',
-        method: 'zatgo_core.api.v1.go_van.visits.update',
+        method: ZatGoApiMethods.goVanVisitsUpdate,
         args: {
           'client_id': clientId,
           'stop_id': id,
@@ -205,6 +250,11 @@ class VanSaleRepo {
     required String itemCode,
     required double delta,
   }) async {
+    final warehouse = VanSalePrefs.instance.warehouse.trim();
+    if (warehouse.isEmpty) {
+      throw StateError('Set van warehouse in Settings before adjusting stock.');
+    }
+    final company = VanSalePrefs.instance.company.trim();
     final database = await db.database;
     await database.transaction((txn) async {
       final stock = await db.getStock(itemCode, executor: txn);
@@ -215,22 +265,40 @@ class VanSaleRepo {
       }
       await db.setStockQty(itemCode, next, executor: txn);
       final clientId = newClientId();
-      // Unique entity_id per adjust so retries never collide with prior adjusts.
       await db.enqueue(
         clientId: clientId,
         entityType: 'van_stock',
         entityId: clientId,
         op: 'update',
-        method: 'zatgo_core.api.v1.go_van.stock.adjust',
+        method: ZatGoApiMethods.goVanStockAdjust,
         args: {
           'client_id': clientId,
           'item_code': itemCode,
           'delta': delta,
-          'qty_after': next,
+          'warehouse': warehouse,
+          if (company.isNotEmpty) 'company': company,
         },
         executor: txn,
       );
     });
+  }
+
+  List<dynamic> _asList(Object? data) {
+    if (data is List) return data;
+    if (data is Map && data['data'] is List) return data['data'] as List;
+    return const [];
+  }
+
+  VisitStatus? _visitFromErp(String raw) {
+    final v = raw.trim().toLowerCase();
+    if (v.isEmpty) return null;
+    if (v == 'planned') return VisitStatus.planned;
+    if (v == 'checked in' || v == 'checkedin' || v == 'checked_in') {
+      return VisitStatus.checkedIn;
+    }
+    if (v == 'completed' || v == 'done') return VisitStatus.completed;
+    if (v == 'skipped') return VisitStatus.skipped;
+    return null;
   }
 }
 

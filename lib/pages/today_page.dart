@@ -11,11 +11,13 @@ class TodayPage extends StatefulWidget {
     required this.sync,
     required this.onSell,
     required this.onCollect,
+    this.onOpenMenu,
   });
 
   final SyncService sync;
   final void Function(String customer) onSell;
   final void Function(String customer) onCollect;
+  final VoidCallback? onOpenMenu;
 
   @override
   State<TodayPage> createState() => _TodayPageState();
@@ -80,6 +82,7 @@ class _TodayPageState extends State<TodayPage> {
     return PageScaffold(
       title: 'VanSale',
       subtitle: vanSaleRepo.routeName,
+      onOpenMenu: widget.onOpenMenu,
       actions: [
         IconButton(
           tooltip: 'Sync outbox',
@@ -107,7 +110,7 @@ class _TodayPageState extends State<TodayPage> {
                 const SizedBox(height: 4),
                 Text(
                   'Sell from the van, collect cash, complete visits. '
-                  'SQLite keeps every order until ERP confirms.',
+                  'Data syncs to ERPNext Sales Invoice / Payment Entry.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -196,8 +199,8 @@ class _TodayPageState extends State<TodayPage> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'No stops yet. Continue offline to use seed route, '
-                              'or sync trips after sign-in.',
+                              'No trips from ERPNext yet. Create ZG Trip '
+                              'records on the site, then Sync.',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),

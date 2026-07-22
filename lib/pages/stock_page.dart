@@ -6,9 +6,10 @@ import '../services/sync_service.dart';
 import '../widgets/widgets.dart';
 
 class StockPage extends StatefulWidget {
-  const StockPage({super.key, required this.sync});
+  const StockPage({super.key, required this.sync, this.onOpenMenu});
 
   final SyncService sync;
+  final VoidCallback? onOpenMenu;
 
   @override
   State<StockPage> createState() => _StockPageState();
@@ -84,10 +85,11 @@ class _StockPageState extends State<StockPage> {
   Widget build(BuildContext context) {
     return PageScaffold(
       title: 'Van stock',
-      subtitle: 'On-board inventory',
+      subtitle: 'ERPNext Bin · set warehouse in Settings',
+      onOpenMenu: widget.onOpenMenu,
       child: _stock.isEmpty
           ? const EmptyHint(
-              'No van stock lines.',
+              'No stock for this warehouse. Set Van warehouse in Settings and Sync.',
               icon: Icons.inventory_2_outlined,
             )
           : ListView.separated(

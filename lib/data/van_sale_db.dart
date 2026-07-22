@@ -132,94 +132,9 @@ CREATE TABLE meta (
 
   Future<bool> isSeeded() async => (await metaGet('seeded')) == '1';
 
+  /// No Flutter seed data — ERPNext is the only source of truth.
   Future<void> seedIfNeeded() async {
-    if (await isSeeded()) return;
-    final db = await database;
-    final now = DateTime.now().toIso8601String();
-    await db.transaction((txn) async {
-      final stops = [
-        (
-          'stop-1',
-          'City Grocer',
-          '12 King Fahd Rd',
-          1,
-          24.7136,
-          46.6753,
-        ),
-        (
-          'stop-2',
-          'Fresh Basket Co-op',
-          '88 Olaya St',
-          2,
-          24.6900,
-          46.6850,
-        ),
-        (
-          'stop-3',
-          'Corner Mart',
-          '4 Tahlia St',
-          3,
-          24.7005,
-          46.6920,
-        ),
-        (
-          'stop-4',
-          'Sunrise Cafe',
-          '21 Prince Sultan Rd',
-          4,
-          24.7201,
-          46.6602,
-        ),
-        (
-          'stop-5',
-          'Neighborhood Mini',
-          '9 Exit 5 service rd',
-          5,
-          24.7350,
-          46.7100,
-        ),
-      ];
-      for (final s in stops) {
-        await txn.insert('route_stops', {
-          'id': s.$1,
-          'customer_name': s.$2,
-          'address': s.$3,
-          'sequence': s.$4,
-          'lat': s.$5,
-          'lng': s.$6,
-          'visit_status': VisitStatus.planned.name,
-          'planned_at': now,
-          'updated_at': now,
-        });
-      }
-
-      final stock = [
-        ('SKU-WATER-1.5', 'Water 1.5L', 48.0, 'Nos', 2.5),
-        ('SKU-JUICE-OR', 'Orange Juice 1L', 24.0, 'Nos', 6.0),
-        ('SKU-MILK-1', 'Fresh Milk 1L', 30.0, 'Nos', 5.5),
-        ('SKU-BREAD', 'Sandwich Bread', 20.0, 'Nos', 4.0),
-        ('SKU-CHIPS', 'Chips Family', 36.0, 'Nos', 3.5),
-        ('SKU-YOG', 'Yogurt Cup', 40.0, 'Nos', 2.0),
-        ('SKU-SOAP', 'Dish Soap 750ml', 18.0, 'Nos', 8.0),
-      ];
-      for (final line in stock) {
-        await txn.insert('van_stock', {
-          'item_code': line.$1,
-          'item_name': line.$2,
-          'qty': line.$3,
-          'uom': line.$4,
-          'unit_price': line.$5,
-          'updated_at': now,
-        });
-      }
-
-      await txn.insert('meta', {'key': 'seeded', 'value': '1'});
-      await txn.insert('meta', {
-        'key': 'route_name',
-        'value': 'Riyadh North · VanSale',
-      });
-      await txn.insert('meta', {'key': 'driver_name', 'value': 'Driver'});
-    });
+    // Intentionally empty.
   }
 
   // --- stops ---
@@ -325,6 +240,29 @@ CREATE TABLE meta (
       where: 'item_code = ?',
       whereArgs: [itemCode],
     );
+  }
+
+  Future<void> replaceStock(List<StockLine> lines) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn.delete('van_stock');
+      for (final line in lines) {
+        await txn.insert('van_stock', {
+          'item_code': line.itemCode,
+          'item_name': line.itemName,
+          'qty': line.qty,
+          'uom': line.uom,
+          'unit_price': line.unitPrice,
+          'updated_at': now,
+        });
+      }
+    });
+  }
+
+  Future<void> clearStops() async {
+    final db = await database;
+    await db.delete('route_stops');
   }
 
   // --- orders ---

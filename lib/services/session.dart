@@ -17,7 +17,6 @@ class VanSaleSession extends ChangeNotifier {
   String? user;
   String? fullName;
   String? lastError;
-  bool allowMockWithoutLogin = false;
 
   bool get connected => store.connected;
 
@@ -36,7 +35,6 @@ class VanSaleSession extends ChangeNotifier {
       fullName = result.session.fullName;
       baseUrl = result.session.baseUrl;
       lastError = null;
-      allowMockWithoutLogin = false;
     } else if (result is ErpnextLoginFail) {
       user = null;
       fullName = null;
@@ -50,13 +48,6 @@ class VanSaleSession extends ChangeNotifier {
     await store.logout();
     user = null;
     fullName = null;
-    lastError = null;
-    allowMockWithoutLogin = false;
-    notifyListeners();
-  }
-
-  void continueOffline() {
-    allowMockWithoutLogin = true;
     lastError = null;
     notifyListeners();
   }

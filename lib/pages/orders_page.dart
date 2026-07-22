@@ -11,11 +11,13 @@ class OrdersPage extends StatefulWidget {
     required this.sync,
     this.initialCustomer,
     this.onConsumedPrefill,
+    this.onOpenMenu,
   });
 
   final SyncService sync;
   final String? initialCustomer;
   final VoidCallback? onConsumedPrefill;
+  final VoidCallback? onOpenMenu;
 
   @override
   State<OrdersPage> createState() => _OrdersPageState();
@@ -218,7 +220,8 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget build(BuildContext context) {
     return PageScaffold(
       title: 'Sell',
-      subtitle: 'Van sales tickets · idempotent client_id',
+      subtitle: 'Sales Invoice · client_id sync',
+      onOpenMenu: widget.onOpenMenu,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _saving ? null : () => _newOrder(),
         icon: const Icon(Icons.add),

@@ -11,11 +11,13 @@ class CollectionsPage extends StatefulWidget {
     required this.sync,
     this.initialCustomer,
     this.onConsumedPrefill,
+    this.onOpenMenu,
   });
 
   final SyncService sync;
   final String? initialCustomer;
   final VoidCallback? onConsumedPrefill;
+  final VoidCallback? onOpenMenu;
 
   @override
   State<CollectionsPage> createState() => _CollectionsPageState();
@@ -125,10 +127,22 @@ class _CollectionsPageState extends State<CollectionsPage> {
     if (ok != true || !mounted) return;
     setState(() => _saving = true);
     try {
+      String? salesInvoice;
+      final orders = await vanSaleRepo.listOrders();
+      for (final o in orders) {
+        if (o.customerName == customer.trim() &&
+            o.erpName != null &&
+            o.erpName!.isNotEmpty &&
+            o.syncStatus == SyncStatus.synced) {
+          salesInvoice = o.erpName;
+          break;
+        }
+      }
       await vanSaleRepo.recordCollection(
         customerName: customer.trim().isEmpty ? 'Customer' : customer.trim(),
         amount: double.tryParse(amount.text) ?? 0,
         method: method,
+        salesInvoice: salesInvoice,
       );
       await widget.sync.flush(pullTrips: false);
       await _load();
@@ -151,7 +165,8 @@ class _CollectionsPageState extends State<CollectionsPage> {
 
     return PageScaffold(
       title: 'Cash',
-      subtitle: 'Collections · safe client_id sync',
+      subtitle: 'Payment Entry · safe client_id sync',
+      onOpenMenu: widget.onOpenMenu,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _saving ? null : () => _collect(),
         icon: const Icon(Icons.payments_outlined),

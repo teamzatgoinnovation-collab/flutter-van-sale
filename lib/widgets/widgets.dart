@@ -11,6 +11,7 @@ class PageScaffold extends StatelessWidget {
     this.subtitle,
     this.actions,
     this.floatingActionButton,
+    this.onOpenMenu,
   });
 
   final String title;
@@ -18,6 +19,7 @@ class PageScaffold extends StatelessWidget {
   final Widget child;
   final List<Widget>? actions;
   final Widget? floatingActionButton;
+  final VoidCallback? onOpenMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +36,13 @@ class PageScaffold extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: onOpenMenu == null
+            ? null
+            : IconButton(
+                tooltip: 'Menu',
+                onPressed: onOpenMenu,
+                icon: const Icon(Icons.menu),
+              ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

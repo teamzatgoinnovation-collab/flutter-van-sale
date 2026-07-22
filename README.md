@@ -1,17 +1,15 @@
 # VanSale — Flutter client
 
-**Status:** Local-first van sales with SQLite + idempotent outbox sync  
-**Backend pull:** `zatgo_core.api.v1.go_van.*` (trips list/get when signed in)  
+**Status:** ERPNext-backed van sales (SQLite cache + idempotent outbox)  
+**Backend:** `zatgo_core.api.v1.go_van.*` → Sales Invoice / Payment Entry / Stock Entry / ZG Trip  
 **SDK:** [`SharedSDK/dart_sdk`](../../../SharedSDK/dart_sdk/)
-
-Real-world van / route sales: today’s route, sell from van stock, cash collections, visit check-in, durable offline queue with `client_id` so orders are not duplicated or lost.
 
 ## Auth
 
-Sign in with ERPNext **site URL + email/password**, or **Continue offline** to work against SQLite seed data. Optional default site:
+Sign in with ERPNext **site URL + email/password**. No offline mock mode.
 
 ```bash
---dart-define=FRAPPE_BASE_URL=https://demo.zatgo.online
+--dart-define=FRAPPE_BASE_URL=https://erp.zatgo.online
 ```
 
 ## Run
@@ -26,21 +24,14 @@ flutter run
 
 | Tab | Role |
 |-----|------|
-| Today | Route, visit actions, sync counts, Sell/Collect shortcuts |
-| Sell | Stock-pick van order → SQLite + outbox (`client_id`) |
-| Cash | Collections with sync badges |
-| Stock | Load / issue on-van inventory |
-| Link | Session / offline status, ping, sign out |
+| Today | ZG Trip route, visit status, sync |
+| Sell | Sales Invoice from van stock |
+| Cash | Payment Entry collections |
+| Stock | Bin balances for van warehouse |
+
+**Drawer:** Settings (site URL, warehouse, company), Sync, Sign out
 
 ## Offline + sync
 
-- SQLite is source of truth (`van_sale.db`)
-- Every sale/collection is saved with a stable UUID `client_id` and an outbox row in the same transaction
-- Sync never drops a row without ERP ack; missing write APIs mark **Awaiting ERP** and keep the outbox
-
-## Dependency
-
-```yaml
-zatgo_dart_sdk:
-  path: ../../../SharedSDK/dart_sdk
-```
+- SQLite caches ERP pulls and queues writes with stable `client_id`
+- Flush requires ERP ack (`erp_name`) before dropping outbox rows
