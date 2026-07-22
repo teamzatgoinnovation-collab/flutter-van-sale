@@ -29,6 +29,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
   ProductDefaults _defaults = ProductDefaults.fallback();
   bool _loading = true;
   bool _saving = false;
+  bool _showMore = false;
 
   @override
   void initState() {
@@ -129,11 +130,11 @@ class _ProductFormPageState extends State<ProductFormPage> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               children: [
                 Text(
-                  'Catalog normally syncs from ERPNext. Create here only when allowed — saved locally first.',
+                  'Only required fields are shown. Tap More for optional details.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 12),
-                _section('Basic Information'),
+                _section('Required'),
                 TextFormField(
                   decoration: const InputDecoration(labelText: 'Item Code *'),
                   textCapitalization: TextCapitalization.characters,
@@ -143,12 +144,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
                   decoration: const InputDecoration(labelText: 'Item Name *'),
                   onChanged: (v) => _draft.itemName = v,
                 ),
-                TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'Item Name Arabic',
-                  ),
-                  onChanged: (v) => _draft.itemNameAr = v,
-                ),
                 _dropdown(
                   label: 'Item Group *',
                   value: _draft.itemGroup,
@@ -156,48 +151,22 @@ class _ProductFormPageState extends State<ProductFormPage> {
                   onChanged: (v) => setState(() => _draft.itemGroup = v),
                 ),
                 _dropdown(
-                  label: 'Default / Sales UOM *',
+                  label: 'Stock UOM *',
+                  value: _draft.stockUom,
+                  options: _defaults.uoms,
+                  onChanged: (v) => setState(() {
+                    _draft.stockUom = v;
+                    if (_draft.salesUom.isEmpty) _draft.salesUom = v;
+                  }),
+                ),
+                _dropdown(
+                  label: 'Sales UOM *',
                   value: _draft.salesUom.isEmpty
                       ? _draft.stockUom
                       : _draft.salesUom,
                   options: _defaults.uoms,
-                  onChanged: (v) => setState(() {
-                    _draft.salesUom = v;
-                    if (_draft.stockUom.isEmpty) _draft.stockUom = v;
-                  }),
+                  onChanged: (v) => setState(() => _draft.salesUom = v),
                 ),
-                _dropdown(
-                  label: 'Stock UOM *',
-                  value: _draft.stockUom,
-                  options: _defaults.uoms,
-                  onChanged: (v) => setState(() => _draft.stockUom = v),
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Description'),
-                  maxLines: 2,
-                  onChanged: (v) => _draft.description = v,
-                ),
-                _dropdown(
-                  label: 'Brand',
-                  value: _draft.brand,
-                  options: _defaults.brands,
-                  allowEmpty: true,
-                  onChanged: (v) => setState(() => _draft.brand = v),
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Barcode'),
-                  onChanged: (v) => _draft.barcode = v,
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'SKU'),
-                  onChanged: (v) => _draft.sku = v,
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'HS Code'),
-                  onChanged: (v) => _draft.hsCode = v,
-                ),
-                const SizedBox(height: 16),
-                _section('Sales'),
                 TextFormField(
                   decoration: const InputDecoration(labelText: 'Selling Rate'),
                   keyboardType: const TextInputType.numberWithOptions(
@@ -205,54 +174,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
                   ),
                   onChanged: (v) =>
                       _draft.sellingRate = double.tryParse(v.trim()) ?? 0,
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Purchase Rate'),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  onChanged: (v) =>
-                      _draft.purchaseRate = double.tryParse(v.trim()) ?? 0,
-                ),
-                _dropdown(
-                  label: 'Price List',
-                  value: _draft.priceList,
-                  options: _defaults.priceLists,
-                  allowEmpty: true,
-                  onChanged: (v) => setState(() => _draft.priceList = v),
-                ),
-                _dropdown(
-                  label: 'Tax Template',
-                  value: _draft.taxTemplate,
-                  options: _defaults.itemTaxTemplates,
-                  allowEmpty: true,
-                  onChanged: (v) => setState(() => _draft.taxTemplate = v),
-                ),
-                const SizedBox(height: 16),
-                _section('Inventory'),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Maintain Stock'),
-                  value: _draft.maintainStock,
-                  onChanged: (v) => setState(() => _draft.maintainStock = v),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(_draft.disabled ? 'Disabled' : 'Enabled'),
-                  value: !_draft.disabled,
-                  onChanged: (v) => setState(() => _draft.disabled = !v),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Has Batch'),
-                  value: _draft.hasBatch,
-                  onChanged: (v) => setState(() => _draft.hasBatch = v),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Has Serial Number'),
-                  value: _draft.hasSerial,
-                  onChanged: (v) => setState(() => _draft.hasSerial = v),
                 ),
                 TextFormField(
                   decoration: const InputDecoration(
@@ -264,87 +185,173 @@ class _ProductFormPageState extends State<ProductFormPage> {
                   onChanged: (v) =>
                       _draft.openingQuantity = double.tryParse(v.trim()) ?? 0,
                 ),
-                _dropdown(
-                  label: 'Opening Warehouse',
-                  value: _draft.openingWarehouse,
-                  options: _defaults.warehouses,
-                  allowEmpty: true,
-                  onChanged: (v) =>
-                      setState(() => _draft.openingWarehouse = v),
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Reorder Level'),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                const SizedBox(height: 12),
+                _moreButton(),
+                if (_showMore) ...[
+                  const SizedBox(height: 16),
+                  _section('Details'),
+                  TextFormField(
+                    decoration: const InputDecoration(
+                      labelText: 'Item Name Arabic',
+                    ),
+                    onChanged: (v) => _draft.itemNameAr = v,
                   ),
-                  onChanged: (v) =>
-                      _draft.reorderLevel = double.tryParse(v.trim()),
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Weight'),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Description'),
+                    maxLines: 2,
+                    onChanged: (v) => _draft.description = v,
                   ),
-                  onChanged: (v) => _draft.weight = double.tryParse(v.trim()),
-                ),
-                _dropdown(
-                  label: 'Weight UOM',
-                  value: _draft.weightUom,
-                  options: _defaults.uoms,
-                  allowEmpty: true,
-                  onChanged: (v) => setState(() => _draft.weightUom = v),
-                ),
-                const SizedBox(height: 16),
-                _section('Accounting'),
-                _dropdown(
-                  label: 'Income Account',
-                  value: _draft.incomeAccount,
-                  options: _defaults.incomeAccounts,
-                  allowEmpty: true,
-                  onChanged: (v) => setState(() => _draft.incomeAccount = v),
-                ),
-                _dropdown(
-                  label: 'Expense Account',
-                  value: _draft.expenseAccount,
-                  options: _defaults.expenseAccounts,
-                  allowEmpty: true,
-                  onChanged: (v) => setState(() => _draft.expenseAccount = v),
-                ),
-                _dropdown(
-                  label: 'Cost Center',
-                  value: _draft.costCenter,
-                  options: _defaults.costCenters,
-                  allowEmpty: true,
-                  onChanged: (v) => setState(() => _draft.costCenter = v),
-                ),
-                const SizedBox(height: 16),
-                _section('Images'),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Item Image'),
-                  subtitle: Text(
-                    _draft.imagePath == null
-                        ? 'No file'
-                        : _draft.imagePath!.split('/').last,
+                  _dropdown(
+                    label: 'Brand',
+                    value: _draft.brand,
+                    options: _defaults.brands,
+                    allowEmpty: true,
+                    onChanged: (v) => setState(() => _draft.brand = v),
                   ),
-                  trailing: IconButton(
-                    onPressed: () => _pickImage(gallery: false),
-                    icon: const Icon(Icons.image_outlined),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Barcode'),
+                    onChanged: (v) => _draft.barcode = v,
                   ),
-                ),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Gallery'),
-                  subtitle: Text(
-                    _draft.galleryPaths.isEmpty
-                        ? 'No files'
-                        : '${_draft.galleryPaths.length} file(s)',
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'SKU'),
+                    onChanged: (v) => _draft.sku = v,
                   ),
-                  trailing: IconButton(
-                    onPressed: () => _pickImage(gallery: true),
-                    icon: const Icon(Icons.collections_outlined),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'HS Code'),
+                    onChanged: (v) => _draft.hsCode = v,
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  _section('Sales & tax'),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Purchase Rate'),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onChanged: (v) =>
+                        _draft.purchaseRate = double.tryParse(v.trim()) ?? 0,
+                  ),
+                  _dropdown(
+                    label: 'Price List',
+                    value: _draft.priceList,
+                    options: _defaults.priceLists,
+                    allowEmpty: true,
+                    onChanged: (v) => setState(() => _draft.priceList = v),
+                  ),
+                  _dropdown(
+                    label: 'Tax Template',
+                    value: _draft.taxTemplate,
+                    options: _defaults.itemTaxTemplates,
+                    allowEmpty: true,
+                    onChanged: (v) => setState(() => _draft.taxTemplate = v),
+                  ),
+                  const SizedBox(height: 16),
+                  _section('Inventory'),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Maintain Stock'),
+                    value: _draft.maintainStock,
+                    onChanged: (v) => setState(() => _draft.maintainStock = v),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(_draft.disabled ? 'Disabled' : 'Enabled'),
+                    value: !_draft.disabled,
+                    onChanged: (v) => setState(() => _draft.disabled = !v),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Has Batch'),
+                    value: _draft.hasBatch,
+                    onChanged: (v) => setState(() => _draft.hasBatch = v),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Has Serial Number'),
+                    value: _draft.hasSerial,
+                    onChanged: (v) => setState(() => _draft.hasSerial = v),
+                  ),
+                  _dropdown(
+                    label: 'Opening Warehouse',
+                    value: _draft.openingWarehouse,
+                    options: _defaults.warehouses,
+                    allowEmpty: true,
+                    onChanged: (v) =>
+                        setState(() => _draft.openingWarehouse = v),
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Reorder Level'),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onChanged: (v) =>
+                        _draft.reorderLevel = double.tryParse(v.trim()),
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Weight'),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onChanged: (v) => _draft.weight = double.tryParse(v.trim()),
+                  ),
+                  _dropdown(
+                    label: 'Weight UOM',
+                    value: _draft.weightUom,
+                    options: _defaults.uoms,
+                    allowEmpty: true,
+                    onChanged: (v) => setState(() => _draft.weightUom = v),
+                  ),
+                  const SizedBox(height: 16),
+                  _section('Accounting'),
+                  _dropdown(
+                    label: 'Income Account',
+                    value: _draft.incomeAccount,
+                    options: _defaults.incomeAccounts,
+                    allowEmpty: true,
+                    onChanged: (v) => setState(() => _draft.incomeAccount = v),
+                  ),
+                  _dropdown(
+                    label: 'Expense Account',
+                    value: _draft.expenseAccount,
+                    options: _defaults.expenseAccounts,
+                    allowEmpty: true,
+                    onChanged: (v) => setState(() => _draft.expenseAccount = v),
+                  ),
+                  _dropdown(
+                    label: 'Cost Center',
+                    value: _draft.costCenter,
+                    options: _defaults.costCenters,
+                    allowEmpty: true,
+                    onChanged: (v) => setState(() => _draft.costCenter = v),
+                  ),
+                  const SizedBox(height: 16),
+                  _section('Images'),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Item Image'),
+                    subtitle: Text(
+                      _draft.imagePath == null
+                          ? 'No file'
+                          : _draft.imagePath!.split('/').last,
+                    ),
+                    trailing: IconButton(
+                      onPressed: () => _pickImage(gallery: false),
+                      icon: const Icon(Icons.image_outlined),
+                    ),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Gallery'),
+                    subtitle: Text(
+                      _draft.galleryPaths.isEmpty
+                          ? 'No files'
+                          : '${_draft.galleryPaths.length} file(s)',
+                    ),
+                    trailing: IconButton(
+                      onPressed: () => _pickImage(gallery: true),
+                      icon: const Icon(Icons.collections_outlined),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: _saving ? null : _save,
@@ -357,6 +364,14 @@ class _ProductFormPageState extends State<ProductFormPage> {
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _moreButton() {
+    return OutlinedButton.icon(
+      onPressed: () => setState(() => _showMore = !_showMore),
+      icon: Icon(_showMore ? Icons.expand_less : Icons.expand_more),
+      label: Text(_showMore ? 'Less' : 'More'),
     );
   }
 

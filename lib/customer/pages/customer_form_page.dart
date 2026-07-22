@@ -29,6 +29,7 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
   CustomerDefaults _defaults = CustomerDefaults.fallback();
   bool _loading = true;
   bool _saving = false;
+  bool _showMore = false;
 
   @override
   void initState() {
@@ -119,11 +120,11 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               children: [
                 Text(
-                  'Saved on device first. Syncs to ERPNext when online.',
+                  'Only required fields are shown. Tap More for optional details.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 12),
-                _section('Identity'),
+                _section('Required'),
                 TextFormField(
                   initialValue: _draft.customerName,
                   decoration: const InputDecoration(
@@ -131,13 +132,6 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                   ),
                   textCapitalization: TextCapitalization.words,
                   onChanged: (v) => _draft.customerName = v,
-                ),
-                TextFormField(
-                  initialValue: _draft.customerNameAr,
-                  decoration: const InputDecoration(
-                    labelText: 'Customer Name Arabic',
-                  ),
-                  onChanged: (v) => _draft.customerNameAr = v,
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
@@ -170,48 +164,6 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                   options: _defaults.territories,
                   onChanged: (v) => setState(() => _draft.territory = v),
                 ),
-                const SizedBox(height: 16),
-                _section('Business Information'),
-                TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'VAT Number (Tax ID)',
-                    hintText: '15 digits starting with 3',
-                  ),
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) => _draft.taxId = v,
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'Commercial Registration (CR)',
-                  ),
-                  onChanged: (v) => _draft.crNumber = v,
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'Customer Code (optional)',
-                  ),
-                  onChanged: (v) => _draft.customerCode = v,
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'Barcode / loyalty card (optional)',
-                  ),
-                  onChanged: (v) => _draft.barcode = v,
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Website'),
-                  keyboardType: TextInputType.url,
-                  onChanged: (v) => _draft.website = v,
-                ),
-                _dropdownOrField(
-                  label: 'Industry',
-                  value: _draft.industry,
-                  options: _defaults.industries,
-                  allowEmpty: true,
-                  onChanged: (v) => setState(() => _draft.industry = v),
-                ),
-                const SizedBox(height: 16),
-                _section('Contact'),
                 TextFormField(
                   decoration: const InputDecoration(
                     labelText: 'Mobile Number *',
@@ -220,157 +172,211 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                   onChanged: (v) => _draft.mobileNo = v,
                 ),
                 TextFormField(
-                  decoration: const InputDecoration(labelText: 'Phone Number'),
-                  keyboardType: TextInputType.phone,
-                  onChanged: (v) => _draft.phone = v,
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Email'),
-                  keyboardType: TextInputType.emailAddress,
-                  onChanged: (v) => _draft.email = v,
-                ),
-                const SizedBox(height: 16),
-                _section('Address'),
-                TextFormField(
                   decoration: const InputDecoration(
                     labelText: 'Address Line 1 *',
                   ),
                   onChanged: (v) => _draft.addressLine1 = v,
                 ),
                 TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'Address Line 2',
-                  ),
-                  onChanged: (v) => _draft.addressLine2 = v,
-                ),
-                TextFormField(
                   decoration: const InputDecoration(labelText: 'City *'),
                   onChanged: (v) => _draft.city = v,
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'State'),
-                  onChanged: (v) => _draft.state = v,
                 ),
                 TextFormField(
                   initialValue: _draft.country,
                   decoration: const InputDecoration(labelText: 'Country *'),
                   onChanged: (v) => _draft.country = v,
                 ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Postal Code'),
-                  onChanged: (v) => _draft.postalCode = v,
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'Google Map Location (URL)',
-                  ),
-                  onChanged: (v) => _draft.googleMapUrl = v,
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        decoration: const InputDecoration(
-                          labelText: 'Latitude',
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                          signed: true,
-                        ),
-                        onChanged: (v) =>
-                            _draft.latitude = double.tryParse(v.trim()),
-                      ),
+                const SizedBox(height: 12),
+                _moreButton(),
+                if (_showMore) ...[
+                  const SizedBox(height: 16),
+                  _section('Name & business'),
+                  TextFormField(
+                    initialValue: _draft.customerNameAr,
+                    decoration: const InputDecoration(
+                      labelText: 'Customer Name Arabic',
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextFormField(
-                        decoration: const InputDecoration(
-                          labelText: 'Longitude',
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                          signed: true,
-                        ),
-                        onChanged: (v) =>
-                            _draft.longitude = double.tryParse(v.trim()),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _section('Sales Information'),
-                _dropdownOrField(
-                  label: 'Price List',
-                  value: _draft.priceList,
-                  options: _defaults.priceLists,
-                  allowEmpty: true,
-                  onChanged: (v) => setState(() => _draft.priceList = v),
-                ),
-                _dropdownOrField(
-                  label: 'Sales Person',
-                  value: _draft.salesPerson,
-                  options: _defaults.salesPersons,
-                  allowEmpty: true,
-                  onChanged: (v) => setState(() => _draft.salesPerson = v),
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Credit Limit'),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                    onChanged: (v) => _draft.customerNameAr = v,
                   ),
-                  onChanged: (v) =>
-                      _draft.creditLimit = double.tryParse(v.trim()),
-                ),
-                _dropdownOrField(
-                  label: 'Payment Terms Template',
-                  value: _draft.paymentTerms,
-                  options: _defaults.paymentTermsTemplates,
-                  allowEmpty: true,
-                  onChanged: (v) => setState(() => _draft.paymentTerms = v),
-                ),
-                _dropdownOrField(
-                  label: 'Currency',
-                  value: _draft.currency,
-                  options: _defaults.currencies,
-                  allowEmpty: true,
-                  onChanged: (v) => setState(() => _draft.currency = v),
-                ),
-                const SizedBox(height: 16),
-                _section('Status'),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(_draft.enabled ? 'Enabled' : 'Disabled'),
-                  value: _draft.enabled,
-                  onChanged: (v) => setState(() => _draft.enabled = v),
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Remarks'),
-                  maxLines: 3,
-                  onChanged: (v) => _draft.remarks = v,
-                ),
-                const SizedBox(height: 16),
-                _section('Attachments'),
-                _attachTile(
-                  label: 'Commercial Registration Image',
-                  path: _draft.crImagePath,
-                  onPick: () => _pickImage((p) => _draft.crImagePath = p),
-                  onClear: () => setState(() => _draft.crImagePath = null),
-                ),
-                _attachTile(
-                  label: 'VAT Certificate',
-                  path: _draft.vatCertificatePath,
-                  onPick: () =>
-                      _pickImage((p) => _draft.vatCertificatePath = p),
-                  onClear: () =>
-                      setState(() => _draft.vatCertificatePath = null),
-                ),
-                _attachTile(
-                  label: 'Customer Photo',
-                  path: _draft.customerPhotoPath,
-                  onPick: () => _pickImage((p) => _draft.customerPhotoPath = p),
-                  onClear: () =>
-                      setState(() => _draft.customerPhotoPath = null),
-                ),
+                  TextFormField(
+                    decoration: const InputDecoration(
+                      labelText: 'VAT Number (Tax ID)',
+                      hintText: '15 digits starting with 3',
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (v) => _draft.taxId = v,
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(
+                      labelText: 'Commercial Registration (CR)',
+                    ),
+                    onChanged: (v) => _draft.crNumber = v,
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(
+                      labelText: 'Customer Code',
+                    ),
+                    onChanged: (v) => _draft.customerCode = v,
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(
+                      labelText: 'Barcode / loyalty card',
+                    ),
+                    onChanged: (v) => _draft.barcode = v,
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Website'),
+                    keyboardType: TextInputType.url,
+                    onChanged: (v) => _draft.website = v,
+                  ),
+                  _dropdownOrField(
+                    label: 'Industry',
+                    value: _draft.industry,
+                    options: _defaults.industries,
+                    allowEmpty: true,
+                    onChanged: (v) => setState(() => _draft.industry = v),
+                  ),
+                  const SizedBox(height: 16),
+                  _section('More contact'),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Phone Number'),
+                    keyboardType: TextInputType.phone,
+                    onChanged: (v) => _draft.phone = v,
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    keyboardType: TextInputType.emailAddress,
+                    onChanged: (v) => _draft.email = v,
+                  ),
+                  const SizedBox(height: 16),
+                  _section('More address'),
+                  TextFormField(
+                    decoration: const InputDecoration(
+                      labelText: 'Address Line 2',
+                    ),
+                    onChanged: (v) => _draft.addressLine2 = v,
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'State'),
+                    onChanged: (v) => _draft.state = v,
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Postal Code'),
+                    onChanged: (v) => _draft.postalCode = v,
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(
+                      labelText: 'Google Map Location (URL)',
+                    ),
+                    onChanged: (v) => _draft.googleMapUrl = v,
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          decoration: const InputDecoration(
+                            labelText: 'Latitude',
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                            signed: true,
+                          ),
+                          onChanged: (v) =>
+                              _draft.latitude = double.tryParse(v.trim()),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          decoration: const InputDecoration(
+                            labelText: 'Longitude',
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                            signed: true,
+                          ),
+                          onChanged: (v) =>
+                              _draft.longitude = double.tryParse(v.trim()),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _section('Sales'),
+                  _dropdownOrField(
+                    label: 'Price List',
+                    value: _draft.priceList,
+                    options: _defaults.priceLists,
+                    allowEmpty: true,
+                    onChanged: (v) => setState(() => _draft.priceList = v),
+                  ),
+                  _dropdownOrField(
+                    label: 'Sales Person',
+                    value: _draft.salesPerson,
+                    options: _defaults.salesPersons,
+                    allowEmpty: true,
+                    onChanged: (v) => setState(() => _draft.salesPerson = v),
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Credit Limit'),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onChanged: (v) =>
+                        _draft.creditLimit = double.tryParse(v.trim()),
+                  ),
+                  _dropdownOrField(
+                    label: 'Payment Terms Template',
+                    value: _draft.paymentTerms,
+                    options: _defaults.paymentTermsTemplates,
+                    allowEmpty: true,
+                    onChanged: (v) => setState(() => _draft.paymentTerms = v),
+                  ),
+                  _dropdownOrField(
+                    label: 'Currency',
+                    value: _draft.currency,
+                    options: _defaults.currencies,
+                    allowEmpty: true,
+                    onChanged: (v) => setState(() => _draft.currency = v),
+                  ),
+                  const SizedBox(height: 16),
+                  _section('Status & notes'),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(_draft.enabled ? 'Enabled' : 'Disabled'),
+                    value: _draft.enabled,
+                    onChanged: (v) => setState(() => _draft.enabled = v),
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Remarks'),
+                    maxLines: 3,
+                    onChanged: (v) => _draft.remarks = v,
+                  ),
+                  const SizedBox(height: 16),
+                  _section('Attachments'),
+                  _attachTile(
+                    label: 'Commercial Registration Image',
+                    path: _draft.crImagePath,
+                    onPick: () => _pickImage((p) => _draft.crImagePath = p),
+                    onClear: () => setState(() => _draft.crImagePath = null),
+                  ),
+                  _attachTile(
+                    label: 'VAT Certificate',
+                    path: _draft.vatCertificatePath,
+                    onPick: () =>
+                        _pickImage((p) => _draft.vatCertificatePath = p),
+                    onClear: () =>
+                        setState(() => _draft.vatCertificatePath = null),
+                  ),
+                  _attachTile(
+                    label: 'Customer Photo',
+                    path: _draft.customerPhotoPath,
+                    onPick: () =>
+                        _pickImage((p) => _draft.customerPhotoPath = p),
+                    onClear: () =>
+                        setState(() => _draft.customerPhotoPath = null),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: _saving ? null : _save,
@@ -383,6 +389,14 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _moreButton() {
+    return OutlinedButton.icon(
+      onPressed: () => setState(() => _showMore = !_showMore),
+      icon: Icon(_showMore ? Icons.expand_less : Icons.expand_more),
+      label: Text(_showMore ? 'Less' : 'More'),
     );
   }
 
