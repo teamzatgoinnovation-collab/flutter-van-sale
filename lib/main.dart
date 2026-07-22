@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'data/van_sale_db.dart';
 import 'data/van_sale_repo.dart';
+import 'core/di/van_sale_services.dart';
 import 'pages/login_page.dart';
 import 'pages/shell.dart';
 import 'services/prefs.dart';
@@ -16,6 +17,7 @@ Future<void> main() async {
   await initVanSaleSqflite();
   await VanSalePrefs.instance.init();
   await vanSaleRepo.init();
+  await VanSaleServices.bootstrap();
   final session = VanSaleSession();
   session.updateBaseUrl(VanSalePrefs.instance.siteUrl);
   runApp(VanSaleApp(session: session));
@@ -40,7 +42,13 @@ class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _sync = SyncService(widget.session);
+    _sync = SyncService(
+      widget.session,
+      db: VanSaleServices.instance.db,
+      repo: VanSaleServices.instance.repo,
+      customers: VanSaleServices.instance.customers,
+      products: VanSaleServices.instance.products,
+    );
     _syncGate();
     widget.session.addListener(_syncGate);
   }

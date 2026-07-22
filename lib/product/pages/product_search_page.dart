@@ -1,7 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
+import '../../core/search/search_list_controller.dart';
 import '../../services/session.dart';
 import '../../services/sync_service.dart';
 import '../../widgets/widgets.dart';
@@ -30,96 +29,53 @@ class ProductSearchPage extends StatefulWidget {
 }
 
 class _ProductSearchPageState extends State<ProductSearchPage> {
-  static const _pageSize = 30;
-
   final _query = TextEditingController();
   final _scroll = ScrollController();
-  Timer? _debounce;
+  final _controller = SearchListController<ProductModel>();
 
   ProductSearchScope _scope = ProductSearchScope.all;
-  List<ProductModel> _items = const [];
-  int _total = 0;
-  bool _hasMore = false;
-  bool _loading = true;
-  bool _loadingMore = false;
-  bool _refreshing = false;
 
   @override
   void initState() {
     super.initState();
     if ((widget.initialQuery ?? '').isNotEmpty) {
       _query.text = widget.initialQuery!;
+      _controller.query = widget.initialQuery!;
     }
+    _controller.runSearch = ({
+      required String query,
+      required int limit,
+      required int offset,
+    }) {
+      return productRepository.search(
+        query: query,
+        limit: limit,
+        offset: offset,
+        scope: _scope,
+      );
+    };
+    _controller.addListener(_onController);
     _scroll.addListener(_onScroll);
-    _reload(reset: true);
+    _controller.reload(reset: true);
+  }
+
+  void _onController() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _controller.removeListener(_onController);
+    _controller.disposeController();
     _query.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
   void _onScroll() {
-    if (!_hasMore || _loadingMore || _loading) return;
     if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 120) {
-      _loadMore();
+      _controller.loadMore();
     }
-  }
-
-  void _onQueryChanged(String _) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 160), () {
-      _reload(reset: true);
-    });
-  }
-
-  Future<void> _reload({required bool reset}) async {
-    if (reset) setState(() => _loading = true);
-    final page = await productRepository.search(
-      query: _query.text,
-      limit: _pageSize,
-      offset: 0,
-      scope: _scope,
-    );
-    if (!mounted) return;
-    setState(() {
-      _items = page.items;
-      _total = page.total;
-      _hasMore = page.hasMore;
-      _loading = false;
-      _refreshing = false;
-    });
-  }
-
-  Future<void> _loadMore() async {
-    if (!_hasMore || _loadingMore) return;
-    setState(() => _loadingMore = true);
-    final page = await productRepository.search(
-      query: _query.text,
-      limit: _pageSize,
-      offset: _items.length,
-      scope: _scope,
-    );
-    if (!mounted) return;
-    setState(() {
-      _items = [..._items, ...page.items];
-      _total = page.total;
-      _hasMore = page.hasMore;
-      _loadingMore = false;
-    });
-  }
-
-  Future<void> _pullRefresh() async {
-    setState(() => _refreshing = true);
-    if (widget.session.connected) {
-      try {
-        await productRepository.refreshFromErp(widget.session);
-      } catch (_) {}
-    }
-    await _reload(reset: true);
   }
 
   Future<void> _barcodeSearch() async {
@@ -155,11 +111,10 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
       await _select(hit);
       return;
     }
-    setState(() {
-      _scope = ProductSearchScope.all;
-      _query.text = code;
-    });
-    await _reload(reset: true);
+    setState(() => _scope = ProductSearchScope.all);
+    _query.text = code;
+    _controller.query = code;
+    await _controller.reload(reset: true);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('No exact barcode match for "$code"')),
@@ -178,12 +133,11 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
     final next = !product.isFavorite;
     await productRepository.toggleFavorite(product.id, favorite: next);
     if (!mounted) return;
-    setState(() {
-      _items = [
-        for (final p in _items)
-          if (p.id == product.id) p.copyWith(isFavorite: next) else p,
-      ];
-    });
+    _controller.items = [
+      for (final p in _controller.items)
+        if (p.id == product.id) p.copyWith(isFavorite: next) else p,
+    ];
+    setState(() {});
   }
 
   Future<void> _createProduct() async {
@@ -200,13 +154,14 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
     if (widget.selectMode) {
       Navigator.of(context).pop(created);
     } else {
-      await _reload(reset: true);
+      await _controller.reload(reset: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = _controller;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.selectMode ? 'Select product' : 'Products'),
@@ -229,7 +184,7 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: TextField(
               controller: _query,
-              onChanged: _onQueryChanged,
+              onChanged: _controller.onQueryChanged,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search),
@@ -239,8 +194,7 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
                     : IconButton(
                         onPressed: () {
                           _query.clear();
-                          _reload(reset: true);
-                          setState(() {});
+                          _controller.clearQuery();
                         },
                         icon: const Icon(Icons.clear),
                       ),
@@ -276,7 +230,7 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
               selected: {_scope},
               onSelectionChanged: (s) {
                 setState(() => _scope = s.first);
-                _reload(reset: true);
+                _controller.reload(reset: true);
               },
             ),
           ),
@@ -285,7 +239,7 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                _loading ? 'Searching…' : '$_total products',
+                c.loading ? 'Searching…' : '${c.total} products',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -294,10 +248,14 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
           ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _pullRefresh,
-              child: _loading && !_refreshing
+              onRefresh: () => _controller.pullRefresh(
+                widget.session.connected
+                    ? () => productRepository.refreshFromErp(widget.session)
+                    : null,
+              ),
+              child: c.loading && !c.refreshing
                   ? const Center(child: CircularProgressIndicator())
-                  : _items.isEmpty
+                  : c.items.isEmpty
                       ? ListView(
                           physics: const AlwaysScrollableScrollPhysics(),
                           children: [
@@ -334,22 +292,22 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
                       : ListView.builder(
                           controller: _scroll,
                           physics: const AlwaysScrollableScrollPhysics(),
-                          itemCount: _items.length + (_hasMore ? 1 : 0),
+                          itemCount: c.items.length + (c.hasMore ? 1 : 0),
                           itemBuilder: (context, index) {
-                            if (index >= _items.length) {
+                            if (index >= c.items.length) {
                               return Padding(
                                 padding: const EdgeInsets.all(16),
                                 child: Center(
-                                  child: _loadingMore
+                                  child: c.loadingMore
                                       ? const CircularProgressIndicator()
                                       : TextButton(
-                                          onPressed: _loadMore,
+                                          onPressed: _controller.loadMore,
                                           child: const Text('Load more'),
                                         ),
                                 ),
                               );
                             }
-                            final p = _items[index];
+                            final p = c.items[index];
                             return ListTile(
                               leading: ProductThumb(path: p.imagePath),
                               title: Text(p.itemName),
@@ -419,8 +377,7 @@ class _StockChip extends StatelessWidget {
     } else if (product.lowStock) {
       bg = scheme.tertiaryContainer;
       fg = scheme.onTertiaryContainer;
-      label =
-          'Low ${money(product.stockQty)} ${product.stockUom}';
+      label = 'Low ${money(product.stockQty)} ${product.stockUom}';
     } else {
       bg = scheme.secondaryContainer;
       fg = scheme.onSecondaryContainer;

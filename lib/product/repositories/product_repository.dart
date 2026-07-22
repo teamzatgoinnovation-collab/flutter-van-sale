@@ -1,5 +1,8 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../../core/cache/ttl_memory_cache.dart';
+import '../../core/logging/app_logger.dart';
+import '../../core/sync/string_utils.dart';
 import '../../data/van_sale_db.dart';
 import '../../models/models.dart';
 import '../../services/prefs.dart';
@@ -8,6 +11,7 @@ import '../mappers/product_sync_mapper.dart';
 import '../models/product_model.dart';
 import '../validation/product_validators.dart';
 
+/// ERPNext method paths for Item offline sync (ERPNext v16 compatible).
 abstract final class ProductApiMethods {
   static const defaults = 'zatgo_core.api.v1.warehouse.items.defaults';
   static const sync = 'zatgo_core.api.v1.warehouse.items.sync';
@@ -17,11 +21,12 @@ abstract final class ProductApiMethods {
 class ProductRepository {
   ProductRepository(
     this.db, {
-    ProductSyncMapper mapper = const ProductSyncMapper(),
-  }) : _mapper = mapper;
+    this.mapper = const ProductSyncMapper(),
+  });
 
   final VanSaleDb db;
-  final ProductSyncMapper _mapper;
+  final ProductSyncMapper mapper;
+  final _defaultsCache = TtlMemoryCache<ProductDefaults>();
 
   ProductDefaults _defaults = ProductDefaults.fallback();
   ProductDefaults get defaults => _defaults;
@@ -42,14 +47,24 @@ class ProductRepository {
       }
       return _defaults;
     }
-    try {
-      final env = await session.store.callMethod(ProductApiMethods.defaults);
-      if (env.data is Map) {
-        _defaults = ProductDefaults.fromJson(
-          Map<String, dynamic>.from(env.data as Map),
-        );
+
+    final cached = _defaultsCache.value;
+    if (cached != null) {
+      _defaults = cached;
+    } else {
+      try {
+        final env = await session.store.callMethod(ProductApiMethods.defaults);
+        if (env.data is Map) {
+          _defaults = ProductDefaults.fromJson(
+            Map<String, dynamic>.from(env.data as Map),
+          );
+          _defaultsCache.set(_defaults);
+        }
+      } catch (e) {
+        AppLogger.warn('product defaults fetch failed', tag: 'Product', error: e);
       }
-    } catch (_) {}
+    }
+
     final wh = VanSalePrefs.instance.warehouse.trim();
     if ((_defaults.openingWarehouse ?? '').isEmpty && wh.isNotEmpty) {
       _defaults = ProductDefaults(
@@ -485,18 +500,15 @@ class ProductRepository {
     final model = await db.getProduct(localId);
     if (model == null) throw StateError('Product $localId not found');
     final company = VanSalePrefs.instance.company.trim();
-    return _mapper.toSyncArgs(
+    return mapper.toSyncArgs(
       model,
       company: company.isEmpty ? _defaults.company : company,
     );
   }
 
-  String? extractErpName(Object? data) => _mapper.extractErpName(data);
+  String? extractErpName(Object? data) => mapper.extractErpName(data);
 
-  String? _empty(String? v) {
-    final t = v?.trim() ?? '';
-    return t.isEmpty ? null : t;
-  }
+  String? _empty(String? v) => StringUtils.emptyToNull(v);
 }
 
 final productRepository = ProductRepository(VanSaleDb.instance);

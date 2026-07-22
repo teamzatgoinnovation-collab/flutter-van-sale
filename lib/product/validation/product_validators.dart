@@ -1,11 +1,9 @@
 import '../models/product_model.dart';
 
-class ProductValidationException implements Exception {
-  ProductValidationException(this.errors);
-  final List<String> errors;
+import '../../core/errors/validation_exception.dart';
 
-  @override
-  String toString() => errors.join('\n');
+class ProductValidationException extends ValidationException {
+  ProductValidationException(super.errors);
 }
 
 class ProductValidators {

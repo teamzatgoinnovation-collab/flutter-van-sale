@@ -1,7 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
+import '../../core/search/search_list_controller.dart';
 import '../../services/session.dart';
 import '../../services/sync_service.dart';
 import '../models/customer_model.dart';
@@ -30,98 +29,53 @@ class CustomerSearchPage extends StatefulWidget {
 }
 
 class _CustomerSearchPageState extends State<CustomerSearchPage> {
-  static const _pageSize = 30;
-
   final _query = TextEditingController();
   final _scroll = ScrollController();
-  Timer? _debounce;
+  final _controller = SearchListController<CustomerModel>();
 
   CustomerSearchScope _scope = CustomerSearchScope.all;
-  List<CustomerModel> _items = const [];
-  int _total = 0;
-  bool _hasMore = false;
-  bool _loading = true;
-  bool _loadingMore = false;
-  bool _refreshing = false;
 
   @override
   void initState() {
     super.initState();
     if ((widget.initialQuery ?? '').isNotEmpty) {
       _query.text = widget.initialQuery!;
+      _controller.query = widget.initialQuery!;
     }
+    _controller.runSearch = ({
+      required String query,
+      required int limit,
+      required int offset,
+    }) {
+      return customerRepository.search(
+        query: query,
+        limit: limit,
+        offset: offset,
+        scope: _scope,
+      );
+    };
+    _controller.addListener(_onController);
     _scroll.addListener(_onScroll);
-    _reload(reset: true);
+    _controller.reload(reset: true);
+  }
+
+  void _onController() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _controller.removeListener(_onController);
+    _controller.disposeController();
     _query.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
   void _onScroll() {
-    if (!_hasMore || _loadingMore || _loading) return;
     if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 120) {
-      _loadMore();
+      _controller.loadMore();
     }
-  }
-
-  void _onQueryChanged(String _) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 160), () {
-      _reload(reset: true);
-    });
-  }
-
-  Future<void> _reload({required bool reset}) async {
-    if (reset) {
-      setState(() => _loading = true);
-    }
-    final page = await customerRepository.search(
-      query: _query.text,
-      limit: _pageSize,
-      offset: 0,
-      scope: _scope,
-    );
-    if (!mounted) return;
-    setState(() {
-      _items = page.items;
-      _total = page.total;
-      _hasMore = page.hasMore;
-      _loading = false;
-      _refreshing = false;
-    });
-  }
-
-  Future<void> _loadMore() async {
-    if (!_hasMore || _loadingMore) return;
-    setState(() => _loadingMore = true);
-    final page = await customerRepository.search(
-      query: _query.text,
-      limit: _pageSize,
-      offset: _items.length,
-      scope: _scope,
-    );
-    if (!mounted) return;
-    setState(() {
-      _items = [..._items, ...page.items];
-      _total = page.total;
-      _hasMore = page.hasMore;
-      _loadingMore = false;
-    });
-  }
-
-  Future<void> _pullRefresh() async {
-    setState(() => _refreshing = true);
-    if (widget.session.connected) {
-      try {
-        await customerRepository.refreshFromErp(widget.session);
-      } catch (_) {}
-    }
-    await _reload(reset: true);
   }
 
   Future<void> _barcodeSearch() async {
@@ -158,11 +112,10 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
       await _select(hit);
       return;
     }
-    setState(() {
-      _scope = CustomerSearchScope.all;
-      _query.text = code;
-    });
-    await _reload(reset: true);
+    setState(() => _scope = CustomerSearchScope.all);
+    _query.text = code;
+    _controller.query = code;
+    await _controller.reload(reset: true);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('No exact barcode match for "$code"')),
@@ -181,12 +134,11 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
     final next = !customer.isFavorite;
     await customerRepository.toggleFavorite(customer.id, favorite: next);
     if (!mounted) return;
-    setState(() {
-      _items = [
-        for (final c in _items)
-          if (c.id == customer.id) c.copyWith(isFavorite: next) else c,
-      ];
-    });
+    _controller.items = [
+      for (final c in _controller.items)
+        if (c.id == customer.id) c.copyWith(isFavorite: next) else c,
+    ];
+    setState(() {});
   }
 
   Future<void> _createCustomer() async {
@@ -208,13 +160,14 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
     if (widget.selectMode) {
       Navigator.of(context).pop(created);
     } else {
-      await _reload(reset: true);
+      await _controller.reload(reset: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = _controller;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.selectMode ? 'Select customer' : 'Customers'),
@@ -237,7 +190,7 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: TextField(
               controller: _query,
-              onChanged: _onQueryChanged,
+              onChanged: _controller.onQueryChanged,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search),
@@ -248,8 +201,7 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
                         tooltip: 'Clear',
                         onPressed: () {
                           _query.clear();
-                          _reload(reset: true);
-                          setState(() {});
+                          _controller.clearQuery();
                         },
                         icon: const Icon(Icons.clear),
                       ),
@@ -279,7 +231,7 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
               selected: {_scope},
               onSelectionChanged: (s) {
                 setState(() => _scope = s.first);
-                _reload(reset: true);
+                _controller.reload(reset: true);
               },
             ),
           ),
@@ -288,7 +240,7 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                _loading ? 'Searching…' : '$_total customers',
+                c.loading ? 'Searching…' : '${c.total} customers',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -297,10 +249,14 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
           ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _pullRefresh,
-              child: _loading && !_refreshing
+              onRefresh: () => _controller.pullRefresh(
+                widget.session.connected
+                    ? () => customerRepository.refreshFromErp(widget.session)
+                    : null,
+              ),
+              child: c.loading && !c.refreshing
                   ? const Center(child: CircularProgressIndicator())
-                  : _items.isEmpty
+                  : c.items.isEmpty
                       ? ListView(
                           physics: const AlwaysScrollableScrollPhysics(),
                           children: [
@@ -335,63 +291,66 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
                       : ListView.builder(
                           controller: _scroll,
                           physics: const AlwaysScrollableScrollPhysics(),
-                          itemCount: _items.length + (_hasMore ? 1 : 0),
+                          itemCount: c.items.length + (c.hasMore ? 1 : 0),
                           itemBuilder: (context, index) {
-                            if (index >= _items.length) {
+                            if (index >= c.items.length) {
                               return Padding(
                                 padding: const EdgeInsets.all(16),
                                 child: Center(
-                                  child: _loadingMore
+                                  child: c.loadingMore
                                       ? const CircularProgressIndicator()
                                       : TextButton(
-                                          onPressed: _loadMore,
+                                          onPressed: _controller.loadMore,
                                           child: const Text('Load more'),
                                         ),
                                 ),
                               );
                             }
-                            final c = _items[index];
+                            final customer = c.items[index];
                             return ListTile(
                               leading: CircleAvatar(
                                 child: Text(
-                                  c.customerName.isEmpty
+                                  customer.customerName.isEmpty
                                       ? '?'
-                                      : c.customerName
+                                      : customer.customerName
                                           .substring(0, 1)
                                           .toUpperCase(),
                                 ),
                               ),
-                              title: Text(c.displayName),
+                              title: Text(customer.displayName),
                               subtitle: Text(
                                 [
-                                  if ((c.customerNameAr ?? '').isNotEmpty)
-                                    c.customerNameAr!,
-                                  if (c.subtitle.isNotEmpty) c.subtitle,
-                                  if ((c.email ?? '').isNotEmpty) c.email!,
-                                  if ((c.crNumber ?? '').isNotEmpty)
-                                    'CR ${c.crNumber}',
-                                  if ((c.barcode ?? '').isNotEmpty)
-                                    'BC ${c.barcode}',
+                                  if ((customer.customerNameAr ?? '').isNotEmpty)
+                                    customer.customerNameAr!,
+                                  if (customer.subtitle.isNotEmpty)
+                                    customer.subtitle,
+                                  if ((customer.email ?? '').isNotEmpty)
+                                    customer.email!,
+                                  if ((customer.crNumber ?? '').isNotEmpty)
+                                    'CR ${customer.crNumber}',
+                                  if ((customer.barcode ?? '').isNotEmpty)
+                                    'BC ${customer.barcode}',
                                 ].join('\n'),
                                 maxLines: 3,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              isThreeLine: (c.customerNameAr ?? '').isNotEmpty,
+                              isThreeLine:
+                                  (customer.customerNameAr ?? '').isNotEmpty,
                               trailing: IconButton(
-                                tooltip: c.isFavorite
+                                tooltip: customer.isFavorite
                                     ? 'Unfavorite'
                                     : 'Favorite',
-                                onPressed: () => _toggleFavorite(c),
+                                onPressed: () => _toggleFavorite(customer),
                                 icon: Icon(
-                                  c.isFavorite
+                                  customer.isFavorite
                                       ? Icons.star_rounded
                                       : Icons.star_outline_rounded,
-                                  color: c.isFavorite
+                                  color: customer.isFavorite
                                       ? theme.colorScheme.primary
                                       : null,
                                 ),
                               ),
-                              onTap: () => _select(c),
+                              onTap: () => _select(customer),
                             );
                           },
                         ),

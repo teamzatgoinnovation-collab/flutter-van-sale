@@ -1,3 +1,4 @@
+import '../../core/search/paged_search_result.dart';
 import '../../models/models.dart';
 
 /// Domain model for VanSale customers (local + ERPNext).
@@ -173,21 +174,7 @@ class CustomerModel {
 }
 
 /// Paginated offline customer search result.
-class CustomerSearchResult {
-  const CustomerSearchResult({
-    required this.items,
-    required this.total,
-    required this.limit,
-    required this.offset,
-    required this.hasMore,
-  });
-
-  final List<CustomerModel> items;
-  final int total;
-  final int limit;
-  final int offset;
-  final bool hasMore;
-}
+typedef CustomerSearchResult = PagedSearchResult<CustomerModel>;
 
 enum CustomerSearchScope { all, recent, favorites }
 

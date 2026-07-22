@@ -1,3 +1,4 @@
+import '../../core/search/paged_search_result.dart';
 import '../../models/models.dart';
 
 class ProductModel {
@@ -172,21 +173,8 @@ class ProductModel {
   }
 }
 
-class ProductSearchResult {
-  const ProductSearchResult({
-    required this.items,
-    required this.total,
-    required this.limit,
-    required this.offset,
-    required this.hasMore,
-  });
-
-  final List<ProductModel> items;
-  final int total;
-  final int limit;
-  final int offset;
-  final bool hasMore;
-}
+/// Paginated offline product search result.
+typedef ProductSearchResult = PagedSearchResult<ProductModel>;
 
 enum ProductSearchScope { all, recent, frequent, favorites }
 

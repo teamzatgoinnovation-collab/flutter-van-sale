@@ -1,0 +1,2 @@
+# Shared SQLite file — serialize suites to avoid SQLITE_BUSY (code 5).
+concurrency: 1

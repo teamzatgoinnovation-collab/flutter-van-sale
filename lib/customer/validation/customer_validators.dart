@@ -1,11 +1,9 @@
 import '../models/customer_model.dart';
 
-class CustomerValidationException implements Exception {
-  CustomerValidationException(this.errors);
-  final List<String> errors;
+import '../../core/errors/validation_exception.dart';
 
-  @override
-  String toString() => errors.join('\n');
+class CustomerValidationException extends ValidationException {
+  CustomerValidationException(super.errors);
 }
 
 class CustomerValidators {

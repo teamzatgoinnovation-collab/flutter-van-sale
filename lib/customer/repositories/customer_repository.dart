@@ -1,5 +1,8 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../../core/cache/ttl_memory_cache.dart';
+import '../../core/logging/app_logger.dart';
+import '../../core/sync/string_utils.dart';
 import '../../data/van_sale_db.dart';
 import '../../models/models.dart';
 import '../../services/prefs.dart';
@@ -8,19 +11,23 @@ import '../mappers/customer_sync_mapper.dart';
 import '../models/customer_model.dart';
 import '../validation/customer_validators.dart';
 
-/// ERPNext method paths for customer offline sync.
+/// ERPNext method paths for customer offline sync (ERPNext v16 compatible).
 abstract final class CustomerApiMethods {
   static const defaults = 'zatgo_core.api.v1.accounting.customers.defaults';
   static const sync = 'zatgo_core.api.v1.accounting.customers.sync';
   static const list = 'zatgo_core.api.v1.accounting.customers.list';
 }
+
 /// Offline-first customer repository (local SQLite → ERPNext sync).
 class CustomerRepository {
-  CustomerRepository(this.db, {CustomerSyncMapper mapper = const CustomerSyncMapper()})
-      : _mapper = mapper;
+  CustomerRepository(
+    this.db, {
+    this.mapper = const CustomerSyncMapper(),
+  });
 
   final VanSaleDb db;
-  final CustomerSyncMapper _mapper;
+  final CustomerSyncMapper mapper;
+  final _defaultsCache = TtlMemoryCache<CustomerDefaults>();
 
   CustomerDefaults _defaults = CustomerDefaults.fallback();
   CustomerDefaults get defaults => _defaults;
@@ -42,18 +49,27 @@ class CustomerRepository {
       }
       return _defaults;
     }
-    try {
-      final env = await session.store.callMethod(
-        CustomerApiMethods.defaults,
-      );
-      if (env.data is Map) {
-        _defaults = CustomerDefaults.fromJson(
-          Map<String, dynamic>.from(env.data as Map),
+
+    final cached = _defaultsCache.value;
+    if (cached != null) {
+      _defaults = cached;
+    } else {
+      try {
+        final env = await session.store.callMethod(
+          CustomerApiMethods.defaults,
         );
+        if (env.data is Map) {
+          _defaults = CustomerDefaults.fromJson(
+            Map<String, dynamic>.from(env.data as Map),
+          );
+          _defaultsCache.set(_defaults);
+        }
+      } catch (e) {
+        AppLogger.warn('customer defaults fetch failed', tag: 'Customer', error: e);
+        // Keep last / fallback defaults offline.
       }
-    } catch (_) {
-      // Keep last / fallback defaults offline.
     }
+
     final company = VanSalePrefs.instance.company.trim();
     if ((_defaults.company).isEmpty && company.isNotEmpty) {
       _defaults = CustomerDefaults(
@@ -493,18 +509,15 @@ class CustomerRepository {
       throw StateError('Customer $localId not found locally');
     }
     final company = VanSalePrefs.instance.company.trim();
-    return _mapper.toSyncArgs(
+    return mapper.toSyncArgs(
       model,
       company: company.isEmpty ? _defaults.company : company,
     );
   }
 
-  String? extractErpName(Object? data) => _mapper.extractErpName(data);
+  String? extractErpName(Object? data) => mapper.extractErpName(data);
 
-  String? _emptyToNull(String? v) {
-    final t = v?.trim() ?? '';
-    return t.isEmpty ? null : t;
-  }
+  String? _emptyToNull(String? v) => StringUtils.emptyToNull(v);
 }
 
 final customerRepository = CustomerRepository(VanSaleDb.instance);

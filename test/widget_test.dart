@@ -54,7 +54,7 @@ void main() {
     expect(orders.first.clientId, order.clientId);
     expect(orders.first.syncStatus, SyncStatus.pending);
 
-    final queue = await db.peekQueue(statuses: const ['queued']);
+    final queue = await db.peekQueue(statuses: const ['pending']);
     expect(queue.length, greaterThanOrEqualTo(1));
     final create = queue.firstWhere((q) => q.entityType == 'van_order');
     expect(create.clientId, order.clientId);
@@ -68,7 +68,7 @@ void main() {
       method: 'zatgo_core.api.v1.go_van.orders.create',
       args: {'client_id': order.clientId},
     );
-    final again = await db.peekQueue(statuses: const ['queued']);
+    final again = await db.peekQueue(statuses: const ['pending']);
     final creates = again.where(
       (q) => q.entityType == 'van_order' && q.op == 'create',
     );

@@ -47,14 +47,21 @@ class VanSaleDb {
     return openDatabase(
       path,
       version: 6,
+      onConfigure: (db) async {
+        // Reduce SQLITE_BUSY flakes under concurrent readers/writers.
+        await db.execute('PRAGMA busy_timeout = 5000');
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: (db, version) async {
         await _createV1(db);
         await _createCustomersTable(db);
-        await _createCustomerIndexes(db);
         await _createCustomerSearchTables(db);
+        await _createCustomerIndexes(db);
+        await _createCustomerSearchIndexes(db);
         await _createProductsTable(db);
-        await _createProductIndexes(db);
         await _createProductSearchTables(db);
+        await _createProductIndexes(db);
+        await _createProductSearchIndexes(db);
         await _createSyncLogsTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -94,10 +101,12 @@ class VanSaleDb {
             await db.execute('ALTER TABLE customers ADD COLUMN barcode TEXT');
           } catch (_) {}
           await _createCustomerSearchTables(db);
+          await _createCustomerIndexes(db);
           await _createCustomerSearchIndexes(db);
         }
         if (oldVersion < 6) {
           await _createProductSearchTables(db);
+          await _createProductIndexes(db);
           await _createProductSearchIndexes(db);
         }
       },
@@ -239,7 +248,21 @@ CREATE TABLE IF NOT EXISTS customers (
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_customers_cr ON customers(cr_number)',
     );
-    await _createCustomerSearchIndexes(db);
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_name_ar ON customers(customer_name_ar)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_code ON customers(customer_code)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_barcode ON customers(barcode)',
+    );
   }
 
   Future<void> _createCustomerSearchTables(DatabaseExecutor db) async {
@@ -256,21 +279,6 @@ CREATE TABLE IF NOT EXISTS customer_recent (
   }
 
   Future<void> _createCustomerSearchIndexes(DatabaseExecutor db) async {
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_customers_name_ar ON customers(customer_name_ar)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_customers_code ON customers(customer_code)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_customers_barcode ON customers(barcode)',
-    );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_customer_recent_used ON customer_recent(used_at DESC)',
     );
@@ -326,7 +334,24 @@ CREATE TABLE IF NOT EXISTS products (
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)',
     );
-    await _createProductSearchIndexes(db);
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_name ON products(item_name)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_name_ar ON products(item_name_ar)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_code ON products(item_code)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_group ON products(item_group)',
+    );
   }
 
   Future<void> _createProductSearchTables(DatabaseExecutor db) async {
@@ -350,24 +375,6 @@ CREATE TABLE IF NOT EXISTS product_sales_stats (
   }
 
   Future<void> _createProductSearchIndexes(DatabaseExecutor db) async {
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_products_name ON products(item_name)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_products_name_ar ON products(item_name_ar)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_products_code ON products(item_code)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_products_group ON products(item_group)',
-    );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_product_recent_used ON product_recent(used_at DESC)',
     );
@@ -842,10 +849,19 @@ LIMIT 1
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     // Keep last 50
+    await _trimRecentTable('customer_recent', 'customer_id', keep: 50);
+  }
+
+  Future<void> _trimRecentTable(
+    String table,
+    String idColumn, {
+    required int keep,
+  }) async {
+    final db = await database;
     await db.execute('''
-DELETE FROM customer_recent WHERE customer_id NOT IN (
-  SELECT customer_id FROM (
-    SELECT customer_id FROM customer_recent ORDER BY used_at DESC LIMIT 50
+DELETE FROM $table WHERE $idColumn NOT IN (
+  SELECT $idColumn FROM (
+    SELECT $idColumn FROM $table ORDER BY used_at DESC LIMIT $keep
   )
 )''');
   }
@@ -1233,12 +1249,7 @@ LIMIT 1
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    await db.execute('''
-DELETE FROM product_recent WHERE product_id NOT IN (
-  SELECT product_id FROM (
-    SELECT product_id FROM product_recent ORDER BY used_at DESC LIMIT 50
-  )
-)''');
+    await _trimRecentTable('product_recent', 'product_id', keep: 50);
   }
 
   Future<void> recordProductSales(List<OrderLine> lines) async {
