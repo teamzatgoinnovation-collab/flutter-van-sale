@@ -52,7 +52,7 @@ void main() {
     final orders = await repo.listOrders();
     expect(orders.length, 1);
     expect(orders.first.clientId, order.clientId);
-    expect(orders.first.syncStatus, SyncStatus.queued);
+    expect(orders.first.syncStatus, SyncStatus.pending);
 
     final queue = await db.peekQueue(statuses: const ['queued']);
     expect(queue.length, greaterThanOrEqualTo(1));

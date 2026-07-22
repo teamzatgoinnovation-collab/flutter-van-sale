@@ -38,6 +38,7 @@ class CustomerModel {
     this.currency,
     this.remarks,
     this.erpName,
+    this.erpModified,
     this.crImagePath,
     this.vatCertificatePath,
     this.customerPhotoPath,
@@ -85,6 +86,8 @@ class CustomerModel {
 
   final SyncStatus syncStatus;
   final String? erpName;
+  /// Last known ERPNext `modified` — used for conflict detection.
+  final String? erpModified;
   final String? lastError;
 
   final String? crImagePath;
@@ -101,6 +104,7 @@ class CustomerModel {
   CustomerModel copyWith({
     SyncStatus? syncStatus,
     String? erpName,
+    String? erpModified,
     String? lastError,
     bool? enabled,
   }) {
@@ -138,6 +142,7 @@ class CustomerModel {
       remarks: remarks,
       syncStatus: syncStatus ?? this.syncStatus,
       erpName: erpName ?? this.erpName,
+      erpModified: erpModified ?? this.erpModified,
       lastError: lastError,
       crImagePath: crImagePath,
       vatCertificatePath: vatCertificatePath,

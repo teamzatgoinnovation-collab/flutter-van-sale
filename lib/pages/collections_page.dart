@@ -133,7 +133,7 @@ class _CollectionsPageState extends State<CollectionsPage> {
         if (o.customerName == customer.trim() &&
             o.erpName != null &&
             o.erpName!.isNotEmpty &&
-            o.syncStatus == SyncStatus.synced) {
+            o.syncStatus == SyncStatus.uploaded) {
           salesInvoice = o.erpName;
           break;
         }

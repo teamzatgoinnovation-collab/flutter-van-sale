@@ -75,7 +75,7 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
       if (!mounted) return;
       final latest = await customerRepository.get(created.id) ?? created;
       if (!mounted) return;
-      final synced = latest.syncStatus == SyncStatus.synced;
+      final synced = latest.syncStatus == SyncStatus.uploaded;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

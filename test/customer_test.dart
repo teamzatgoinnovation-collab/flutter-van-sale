@@ -47,7 +47,7 @@ void main() {
       ..country = 'Saudi Arabia';
 
     final created = await repo.createLocal(draft);
-    expect(created.syncStatus, SyncStatus.queued);
+    expect(created.syncStatus, SyncStatus.pending);
     expect(created.clientId, isNotEmpty);
 
     final queue = await VanSaleDb.instance.peekQueue();

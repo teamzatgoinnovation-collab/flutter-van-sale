@@ -169,11 +169,12 @@ class SyncBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
-      SyncStatus.synced => ('Synced', const Color(0xFF0F4C5C)),
-      SyncStatus.queued => ('Queued', const Color(0xFFE36414)),
-      SyncStatus.inFlight => ('In flight', Colors.indigo),
-      SyncStatus.awaitingErp => ('ERP pending', Colors.deepOrange),
+      SyncStatus.pending => ('Pending', const Color(0xFFE36414)),
+      SyncStatus.uploading => ('Uploading', Colors.indigo),
+      SyncStatus.uploaded => ('Uploaded', const Color(0xFF0F4C5C)),
+      SyncStatus.conflict => ('Conflict', Colors.deepOrange),
       SyncStatus.failed => ('Failed', Colors.red.shade700),
+      SyncStatus.retry => ('Retry', Colors.brown),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

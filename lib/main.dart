@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'data/van_sale_db.dart';
@@ -28,7 +30,7 @@ class VanSaleApp extends StatefulWidget {
   State<VanSaleApp> createState() => _VanSaleAppState();
 }
 
-class _VanSaleAppState extends State<VanSaleApp> {
+class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
   bool _showLogin = true;
   late final SyncService _sync;
 
@@ -37,6 +39,7 @@ class _VanSaleAppState extends State<VanSaleApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _sync = SyncService(widget.session);
     _syncGate();
     widget.session.addListener(_syncGate);
@@ -44,8 +47,22 @@ class _VanSaleAppState extends State<VanSaleApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.session.removeListener(_syncGate);
+    _sync.stopBackgroundSync();
+    _sync.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _authed) {
+      unawaited(() async {
+        try {
+          await _sync.flush(mode: SyncMode.background);
+        } catch (_) {}
+      }());
+    }
   }
 
   void _syncGate() {
@@ -59,12 +76,15 @@ class _VanSaleAppState extends State<VanSaleApp> {
     setState(() => _showLogin = !authed);
     if (authed) {
       _afterAuth();
+    } else {
+      _sync.stopBackgroundSync();
     }
   }
 
   Future<void> _afterAuth() async {
+    _sync.startBackgroundSync();
     try {
-      await _sync.flush();
+      await _sync.flush(mode: SyncMode.manual);
     } catch (e) {
       debugPrint('VanSale sync after auth: $e');
     }

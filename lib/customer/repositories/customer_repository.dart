@@ -1,3 +1,5 @@
+import 'package:sqflite/sqflite.dart';
+
 import '../../data/van_sale_db.dart';
 import '../../models/models.dart';
 import '../../services/prefs.dart';
@@ -148,7 +150,7 @@ class CustomerRepository {
       currency: _emptyToNull(draft.currency),
       enabled: draft.enabled,
       remarks: _emptyToNull(draft.remarks),
-      syncStatus: SyncStatus.queued,
+      syncStatus: SyncStatus.pending,
       crImagePath: draft.crImagePath,
       vatCertificatePath: draft.vatCertificatePath,
       customerPhotoPath: draft.customerPhotoPath,
@@ -174,6 +176,186 @@ class CustomerRepository {
       );
     });
     return model;
+  }
+
+  /// Update local customer and enqueue create (if never synced) or update.
+  Future<CustomerModel> updateLocal(String id, CustomerDraft draft) async {
+    final existing = await db.getCustomer(id);
+    if (existing == null) {
+      throw StateError('Customer $id not found');
+    }
+    draft.applyDefaults(_defaults);
+
+    final vat = CustomerValidators.normalizeVat(draft.taxId);
+    final errors = CustomerValidators.validate(
+      customerName: draft.customerName,
+      mobileNo: draft.mobileNo,
+      addressLine1: draft.addressLine1,
+      city: draft.city,
+      country: draft.country,
+      email: draft.email,
+      phone: draft.phone,
+      taxId: vat.isEmpty ? null : vat,
+      customerGroup: draft.customerGroup,
+      territory: draft.territory,
+    );
+    CustomerValidators.throwIfInvalid(errors);
+
+    final dup = await db.findCustomerDuplicate(
+      mobileNo: draft.mobileNo.trim(),
+      taxId: vat.isEmpty ? null : vat,
+      crNumber: draft.crNumber.trim().isEmpty ? null : draft.crNumber.trim(),
+      excludeId: id,
+    );
+    if (dup != null) {
+      throw CustomerValidationException([
+        'Duplicate identity — matches ${dup.customerName}',
+      ]);
+    }
+
+    final now = DateTime.now();
+    final neverSynced = existing.erpName == null || existing.erpName!.isEmpty;
+    final model = CustomerModel(
+      id: existing.id,
+      clientId: existing.clientId,
+      customerName: draft.customerName.trim(),
+      customerNameAr: _emptyToNull(draft.customerNameAr),
+      customerType: CustomerValidators.mapCustomerType(draft.customerType),
+      customerGroup: draft.customerGroup.trim(),
+      territory: draft.territory.trim(),
+      taxId: vat.isEmpty ? null : vat,
+      crNumber: _emptyToNull(draft.crNumber),
+      customerCode: _emptyToNull(draft.customerCode),
+      website: _emptyToNull(draft.website),
+      industry: _emptyToNull(draft.industry),
+      mobileNo: draft.mobileNo.trim(),
+      phone: _emptyToNull(draft.phone),
+      email: _emptyToNull(draft.email),
+      addressLine1: draft.addressLine1.trim(),
+      addressLine2: _emptyToNull(draft.addressLine2),
+      city: draft.city.trim(),
+      state: _emptyToNull(draft.state),
+      country: draft.country.trim(),
+      postalCode: _emptyToNull(draft.postalCode),
+      googleMapUrl: _emptyToNull(draft.googleMapUrl),
+      latitude: draft.latitude,
+      longitude: draft.longitude,
+      priceList: _emptyToNull(draft.priceList),
+      salesPerson: _emptyToNull(draft.salesPerson),
+      creditLimit: draft.creditLimit,
+      paymentTerms: _emptyToNull(draft.paymentTerms),
+      currency: _emptyToNull(draft.currency),
+      enabled: draft.enabled,
+      remarks: _emptyToNull(draft.remarks),
+      syncStatus: SyncStatus.pending,
+      erpName: existing.erpName,
+      erpModified: existing.erpModified,
+      crImagePath: draft.crImagePath ?? existing.crImagePath,
+      vatCertificatePath:
+          draft.vatCertificatePath ?? existing.vatCertificatePath,
+      customerPhotoPath: draft.customerPhotoPath ?? existing.customerPhotoPath,
+      createdAt: existing.createdAt,
+      updatedAt: now,
+    );
+
+    final op = neverSynced ? 'create' : 'update';
+    final database = await db.database;
+    await database.transaction((txn) async {
+      await db.upsertCustomer(model, executor: txn);
+      await db.enqueue(
+        clientId: model.clientId,
+        entityType: 'customer',
+        entityId: model.id,
+        op: op,
+        method: CustomerApiMethods.sync,
+        args: {
+          'client_id': model.clientId,
+          'local_id': model.id,
+          if (existing.erpModified != null)
+            'base_modified': existing.erpModified,
+        },
+        conflict: ConflictAlgorithm.replace,
+        executor: txn,
+      );
+    });
+    return model;
+  }
+
+  /// Soft-delete on ERP (disable) once synced; otherwise drop local only.
+  Future<void> deleteLocal(String id) async {
+    final existing = await db.getCustomer(id);
+    if (existing == null) return;
+
+    final neverSynced = existing.erpName == null || existing.erpName!.isEmpty;
+    final database = await db.database;
+    if (neverSynced) {
+      await database.transaction((txn) async {
+        await db.clearQueueForEntity('customer', id, executor: txn);
+        await db.deleteCustomerRow(id, executor: txn);
+      });
+      return;
+    }
+
+    final model = CustomerModel(
+      id: existing.id,
+      clientId: existing.clientId,
+      customerName: existing.customerName,
+      customerNameAr: existing.customerNameAr,
+      customerType: existing.customerType,
+      customerGroup: existing.customerGroup,
+      territory: existing.territory,
+      taxId: existing.taxId,
+      crNumber: existing.crNumber,
+      customerCode: existing.customerCode,
+      website: existing.website,
+      industry: existing.industry,
+      mobileNo: existing.mobileNo,
+      phone: existing.phone,
+      email: existing.email,
+      addressLine1: existing.addressLine1,
+      addressLine2: existing.addressLine2,
+      city: existing.city,
+      state: existing.state,
+      country: existing.country,
+      postalCode: existing.postalCode,
+      googleMapUrl: existing.googleMapUrl,
+      latitude: existing.latitude,
+      longitude: existing.longitude,
+      priceList: existing.priceList,
+      salesPerson: existing.salesPerson,
+      creditLimit: existing.creditLimit,
+      paymentTerms: existing.paymentTerms,
+      currency: existing.currency,
+      enabled: false,
+      remarks: existing.remarks,
+      syncStatus: SyncStatus.pending,
+      erpName: existing.erpName,
+      erpModified: existing.erpModified,
+      crImagePath: existing.crImagePath,
+      vatCertificatePath: existing.vatCertificatePath,
+      customerPhotoPath: existing.customerPhotoPath,
+      createdAt: existing.createdAt,
+      updatedAt: DateTime.now(),
+    );
+
+    await database.transaction((txn) async {
+      await db.upsertCustomer(model, executor: txn);
+      await db.enqueue(
+        clientId: model.clientId,
+        entityType: 'customer',
+        entityId: model.id,
+        op: 'delete',
+        method: CustomerApiMethods.sync,
+        args: {
+          'client_id': model.clientId,
+          'local_id': model.id,
+          if (existing.erpModified != null)
+            'base_modified': existing.erpModified,
+        },
+        conflict: ConflictAlgorithm.replace,
+        executor: txn,
+      );
+    });
   }
 
   /// Rebuild sync args from local row (attachments from disk).

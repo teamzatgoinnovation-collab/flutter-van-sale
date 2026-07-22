@@ -7,6 +7,7 @@ import 'collections_page.dart';
 import 'orders_page.dart';
 import 'settings_page.dart';
 import 'stock_page.dart';
+import 'sync_center_page.dart';
 import 'today_page.dart';
 
 class VanSaleShell extends StatefulWidget {
@@ -29,6 +30,22 @@ class _VanSaleShellState extends State<VanSaleShell> {
   int _index = 0;
   String? _prefillCustomer;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.sync.addListener(_onSyncChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.sync.removeListener(_onSyncChanged);
+    super.dispose();
+  }
+
+  void _onSyncChanged() {
+    if (mounted) setState(() {});
+  }
 
   Future<void> _signOut() async {
     await widget.session.logout();
@@ -66,12 +83,23 @@ class _VanSaleShellState extends State<VanSaleShell> {
     );
   }
 
+  void _openSyncCenter() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SyncCenterPage(sync: widget.sync),
+      ),
+    );
+  }
+
   Future<void> _syncNow() async {
     final result = await widget.sync.flush();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Synced ${result.processed} · failed ${result.failed}'),
+        content: Text(
+          'Uploaded ${result.uploaded} · conflicts ${result.conflicts} · '
+          'failed ${result.failed}',
+        ),
       ),
     );
   }
@@ -101,6 +129,7 @@ class _VanSaleShellState extends State<VanSaleShell> {
     ];
 
     final user = widget.session.fullName ?? widget.session.user ?? 'User';
+    final sync = widget.sync;
 
     return VanSaleAuthScope(
       session: widget.session,
@@ -145,6 +174,17 @@ class _VanSaleShellState extends State<VanSaleShell> {
                 ),
                 ListTile(
                   leading: const Icon(Icons.cloud_sync_outlined),
+                  title: const Text('Sync Center'),
+                  subtitle: sync.isRunning
+                      ? Text(sync.progressLabel)
+                      : const Text('Queue · conflicts · logs'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openSyncCenter();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.sync_rounded),
                   title: const Text('Sync now'),
                   onTap: () async {
                     Navigator.pop(context);
@@ -163,7 +203,38 @@ class _VanSaleShellState extends State<VanSaleShell> {
             ),
           ),
         ),
-        body: IndexedStack(index: _index, children: pages),
+        body: Column(
+          children: [
+            if (sync.isRunning)
+              Material(
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          sync.progressLabel.isEmpty
+                              ? 'Syncing…'
+                              : sync.progressLabel,
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
+                        const SizedBox(height: 6),
+                        LinearProgressIndicator(
+                          value: sync.progressTotal <= 0
+                              ? null
+                              : sync.progressCurrent / sync.progressTotal,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            Expanded(child: IndexedStack(index: _index, children: pages)),
+          ],
+        ),
         bottomNavigationBar: NavigationBar(
           height: 72,
           elevation: 0,

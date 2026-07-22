@@ -129,7 +129,7 @@ class VanSaleRepo {
       lines: lines,
       amount: amount,
       createdAt: DateTime.now(),
-      syncStatus: SyncStatus.queued,
+      syncStatus: SyncStatus.pending,
     );
 
     final database = await db.database;
@@ -189,7 +189,7 @@ class VanSaleRepo {
       amount: amount,
       method: method,
       collectedAt: DateTime.now(),
-      syncStatus: SyncStatus.queued,
+      syncStatus: SyncStatus.pending,
     );
 
     final database = await db.database;

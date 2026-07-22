@@ -59,10 +59,12 @@ class _TodayPageState extends State<TodayPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          result.processed == 0 && left == 0
+          result.uploaded == 0 &&
+                  result.failed == 0 &&
+                  result.conflicts == 0 &&
+                  left == 0
               ? 'Nothing to sync'
-              : 'Processed ${result.processed} · '
-                    'ERP pending ${result.awaitingErp} · '
+              : 'Uploaded ${result.uploaded} · conflicts ${result.conflicts} · '
                     'failed ${result.failed} · still open $left',
         ),
       ),
@@ -156,21 +158,26 @@ class _TodayPageState extends State<TodayPage> {
                       runSpacing: 8,
                       children: [
                         _SyncCountChip(
-                          label: 'Queued',
+                          label: 'Pending',
                           count: summary.syncQueued,
                         ),
                         _SyncCountChip(
-                          label: 'In flight',
+                          label: 'Uploading',
                           count: summary.syncInFlight,
                         ),
                         _SyncCountChip(
-                          label: 'Awaiting ERP',
-                          count: summary.syncAwaitingErp,
+                          label: 'Conflict',
+                          count: summary.syncConflict,
+                          emphasize: summary.syncConflict > 0,
                         ),
                         _SyncCountChip(
                           label: 'Failed',
                           count: summary.syncFailed,
                           emphasize: summary.syncFailed > 0,
+                        ),
+                        _SyncCountChip(
+                          label: 'Retry',
+                          count: summary.syncRetry,
                         ),
                       ],
                     ),

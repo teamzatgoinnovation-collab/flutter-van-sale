@@ -1,3 +1,5 @@
+import 'package:sqflite/sqflite.dart';
+
 import '../../data/van_sale_db.dart';
 import '../../models/models.dart';
 import '../../services/prefs.dart';
@@ -94,7 +96,7 @@ class ProductRepository {
         if (code.isEmpty) continue;
         final existing = await db.getProductByCode(code);
         if (existing != null &&
-            existing.syncStatus != SyncStatus.synced &&
+            existing.syncStatus != SyncStatus.uploaded &&
             existing.erpName == null) {
           // Keep offline draft with same code
           continue;
@@ -114,8 +116,13 @@ class ProductRepository {
             barcode: map['barcode'] == null ? null : '${map['barcode']}',
             maintainStock: true,
             disabled: (map['disabled'] as num?)?.toInt() == 1,
-            syncStatus: SyncStatus.synced,
+            syncStatus: SyncStatus.uploaded,
             erpName: code,
+            erpModified: map['modified'] == null
+                ? existing?.erpModified
+                : '${map['modified']}',
+            imagePath: existing?.imagePath,
+            galleryPaths: existing?.galleryPaths ?? const [],
             createdAt: existing?.createdAt ?? now,
             updatedAt: now,
           ),
@@ -208,7 +215,7 @@ class ProductRepository {
       costCenter: _empty(draft.costCenter),
       imagePath: draft.imagePath,
       galleryPaths: List.of(draft.galleryPaths),
-      syncStatus: SyncStatus.queued,
+      syncStatus: SyncStatus.pending,
       createdAt: now,
       updatedAt: now,
     );
@@ -238,6 +245,195 @@ class ProductRepository {
       );
     });
     return model;
+  }
+
+  /// Update product locally (incl. images) and enqueue create/update.
+  Future<ProductModel> updateLocal(String id, ProductDraft draft) async {
+    final existing = await db.getProduct(id);
+    if (existing == null) throw StateError('Product $id not found');
+    draft.applyDefaults(_defaults);
+
+    final errors = ProductValidators.validate(
+      itemCode: draft.itemCode,
+      itemName: draft.itemName,
+      itemGroup: draft.itemGroup,
+      stockUom: draft.stockUom,
+      sellingRate: draft.sellingRate,
+      purchaseRate: draft.purchaseRate,
+    );
+    ProductValidators.throwIfInvalid(errors);
+
+    final code = draft.itemCode.trim();
+    final dupCode = await db.findProductDuplicate(
+      itemCode: code,
+      excludeId: id,
+    );
+    if (dupCode != null) {
+      throw ProductValidationException([
+        'Duplicate Item Code — ${dupCode.itemCode}',
+      ]);
+    }
+    final barcode = draft.barcode.trim();
+    if (barcode.isNotEmpty) {
+      final dupBc = await db.findProductDuplicate(
+        barcode: barcode,
+        excludeId: id,
+      );
+      if (dupBc != null) {
+        throw ProductValidationException([
+          'Duplicate Barcode — used by ${dupBc.itemCode}',
+        ]);
+      }
+    }
+
+    final neverSynced = existing.erpName == null || existing.erpName!.isEmpty;
+    final now = DateTime.now();
+    final model = ProductModel(
+      id: existing.id,
+      clientId: existing.clientId,
+      itemCode: code,
+      itemName: draft.itemName.trim(),
+      itemNameAr: _empty(draft.itemNameAr),
+      itemGroup: draft.itemGroup.trim(),
+      stockUom: draft.stockUom.trim(),
+      salesUom: _empty(draft.salesUom) ?? draft.stockUom.trim(),
+      description: _empty(draft.description),
+      brand: _empty(draft.brand),
+      barcode: _empty(draft.barcode),
+      sku: _empty(draft.sku),
+      hsCode: _empty(draft.hsCode),
+      sellingRate: draft.sellingRate,
+      purchaseRate: draft.purchaseRate,
+      priceList: _empty(draft.priceList),
+      taxTemplate: _empty(draft.taxTemplate),
+      maintainStock: draft.maintainStock,
+      disabled: draft.disabled,
+      hasBatch: draft.hasBatch,
+      hasSerial: draft.hasSerial,
+      openingQuantity: draft.openingQuantity,
+      openingWarehouse: _empty(draft.openingWarehouse),
+      reorderLevel: draft.reorderLevel,
+      weight: draft.weight,
+      weightUom: _empty(draft.weightUom),
+      incomeAccount: _empty(draft.incomeAccount),
+      expenseAccount: _empty(draft.expenseAccount),
+      costCenter: _empty(draft.costCenter),
+      imagePath: draft.imagePath ?? existing.imagePath,
+      galleryPaths: draft.galleryPaths.isNotEmpty
+          ? List.of(draft.galleryPaths)
+          : existing.galleryPaths,
+      syncStatus: SyncStatus.pending,
+      erpName: existing.erpName,
+      erpModified: existing.erpModified,
+      createdAt: existing.createdAt,
+      updatedAt: now,
+    );
+
+    final op = neverSynced ? 'create' : 'update';
+    final database = await db.database;
+    await database.transaction((txn) async {
+      await db.upsertProduct(model, executor: txn);
+      await db.upsertStockLine(
+        StockLine(
+          itemCode: model.itemCode,
+          itemName: model.itemName,
+          qty: (await db.getStock(model.itemCode, executor: txn))?.qty ??
+              model.openingQuantity,
+          uom: model.stockUom,
+          unitPrice: model.sellingRate,
+        ),
+        executor: txn,
+      );
+      await db.enqueue(
+        clientId: model.clientId,
+        entityType: 'product',
+        entityId: model.id,
+        op: op,
+        method: ProductApiMethods.sync,
+        args: {
+          'client_id': model.clientId,
+          'local_id': model.id,
+          if (existing.erpModified != null)
+            'base_modified': existing.erpModified,
+        },
+        conflict: ConflictAlgorithm.replace,
+        executor: txn,
+      );
+    });
+    return model;
+  }
+
+  /// Soft-delete (disable) on ERP when synced; otherwise remove local only.
+  Future<void> deleteLocal(String id) async {
+    final existing = await db.getProduct(id);
+    if (existing == null) return;
+    final neverSynced = existing.erpName == null || existing.erpName!.isEmpty;
+    final database = await db.database;
+    if (neverSynced) {
+      await database.transaction((txn) async {
+        await db.clearQueueForEntity('product', id, executor: txn);
+        await db.deleteProductRow(id, executor: txn);
+      });
+      return;
+    }
+
+    final model = ProductModel(
+      id: existing.id,
+      clientId: existing.clientId,
+      itemCode: existing.itemCode,
+      itemName: existing.itemName,
+      itemNameAr: existing.itemNameAr,
+      itemGroup: existing.itemGroup,
+      stockUom: existing.stockUom,
+      salesUom: existing.salesUom,
+      description: existing.description,
+      brand: existing.brand,
+      barcode: existing.barcode,
+      sku: existing.sku,
+      hsCode: existing.hsCode,
+      sellingRate: existing.sellingRate,
+      purchaseRate: existing.purchaseRate,
+      priceList: existing.priceList,
+      taxTemplate: existing.taxTemplate,
+      maintainStock: existing.maintainStock,
+      disabled: true,
+      hasBatch: existing.hasBatch,
+      hasSerial: existing.hasSerial,
+      openingQuantity: existing.openingQuantity,
+      openingWarehouse: existing.openingWarehouse,
+      reorderLevel: existing.reorderLevel,
+      weight: existing.weight,
+      weightUom: existing.weightUom,
+      incomeAccount: existing.incomeAccount,
+      expenseAccount: existing.expenseAccount,
+      costCenter: existing.costCenter,
+      imagePath: existing.imagePath,
+      galleryPaths: existing.galleryPaths,
+      syncStatus: SyncStatus.pending,
+      erpName: existing.erpName,
+      erpModified: existing.erpModified,
+      createdAt: existing.createdAt,
+      updatedAt: DateTime.now(),
+    );
+
+    await database.transaction((txn) async {
+      await db.upsertProduct(model, executor: txn);
+      await db.enqueue(
+        clientId: model.clientId,
+        entityType: 'product',
+        entityId: model.id,
+        op: 'delete',
+        method: ProductApiMethods.sync,
+        args: {
+          'client_id': model.clientId,
+          'local_id': model.id,
+          if (existing.erpModified != null)
+            'base_modified': existing.erpModified,
+        },
+        conflict: ConflictAlgorithm.replace,
+        executor: txn,
+      );
+    });
   }
 
   Future<Map<String, dynamic>> buildSyncArgs(String localId) async {

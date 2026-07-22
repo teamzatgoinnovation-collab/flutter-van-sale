@@ -46,13 +46,14 @@ class VanSaleDb {
     final path = p.join(dir, 'van_sale.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await _createV1(db);
         await _createCustomersTable(db);
         await _createCustomerIndexes(db);
         await _createProductsTable(db);
         await _createProductIndexes(db);
+        await _createSyncLogsTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -66,6 +67,25 @@ class VanSaleDb {
         if (oldVersion < 3) {
           await _createProductsTable(db);
           await _createProductIndexes(db);
+        }
+        if (oldVersion < 4) {
+          await _createSyncLogsTable(db);
+          await db.execute(
+            "UPDATE sync_queue SET status = 'pending' WHERE status IN ('queued','awaiting_erp')",
+          );
+          await db.execute(
+            "UPDATE sync_queue SET status = 'uploading' WHERE status IN ('in_flight')",
+          );
+          try {
+            await db.execute(
+              'ALTER TABLE customers ADD COLUMN erp_modified TEXT',
+            );
+          } catch (_) {}
+          try {
+            await db.execute(
+              'ALTER TABLE products ADD COLUMN erp_modified TEXT',
+            );
+          } catch (_) {}
         }
       },
     );
@@ -183,6 +203,7 @@ CREATE TABLE IF NOT EXISTS customers (
   cr_image_path TEXT,
   vat_certificate_path TEXT,
   customer_photo_path TEXT,
+  erp_modified TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 )''');
@@ -243,6 +264,7 @@ CREATE TABLE IF NOT EXISTS products (
   cost_center TEXT,
   image_path TEXT,
   gallery_paths_json TEXT,
+  erp_modified TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 )''');
@@ -254,6 +276,22 @@ CREATE TABLE IF NOT EXISTS products (
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)',
+    );
+  }
+
+  Future<void> _createSyncLogsTable(DatabaseExecutor db) async {
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS sync_logs (
+  id TEXT PRIMARY KEY NOT NULL,
+  level TEXT NOT NULL,
+  message TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id TEXT,
+  queue_id TEXT,
+  created_at TEXT NOT NULL
+)''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sync_logs_created ON sync_logs(created_at DESC)',
     );
   }
 
@@ -606,6 +644,7 @@ CREATE TABLE IF NOT EXISTS products (
     required String id,
     required SyncStatus status,
     String? erpName,
+    String? erpModified,
     String? lastError,
   }) async {
     final db = await database;
@@ -614,6 +653,7 @@ CREATE TABLE IF NOT EXISTS products (
       {
         'sync_status': status.name,
         if (erpName != null) 'erp_name': erpName,
+        if (erpModified != null) 'erp_modified': erpModified,
         'last_error': lastError,
         'updated_at': DateTime.now().toIso8601String(),
       },
@@ -626,6 +666,7 @@ CREATE TABLE IF NOT EXISTS products (
         'id': c.id,
         'client_id': c.clientId,
         'erp_name': c.erpName,
+        'erp_modified': c.erpModified,
         'sync_status': c.syncStatus.name,
         'last_error': c.lastError,
         'customer_name': c.customerName,
@@ -669,6 +710,8 @@ CREATE TABLE IF NOT EXISTS products (
       id: '${r['id']}',
       clientId: '${r['client_id']}',
       erpName: r['erp_name'] == null ? null : '${r['erp_name']}',
+      erpModified:
+          r['erp_modified'] == null ? null : '${r['erp_modified']}',
       syncStatus: _syncStatusFrom('${r['sync_status']}'),
       lastError: r['last_error'] == null ? null : '${r['last_error']}',
       customerName: '${r['customer_name']}',
@@ -807,6 +850,7 @@ CREATE TABLE IF NOT EXISTS products (
     required String id,
     required SyncStatus status,
     String? erpName,
+    String? erpModified,
     String? lastError,
   }) async {
     final db = await database;
@@ -815,6 +859,7 @@ CREATE TABLE IF NOT EXISTS products (
       {
         'sync_status': status.name,
         if (erpName != null) 'erp_name': erpName,
+        if (erpModified != null) 'erp_modified': erpModified,
         'last_error': lastError,
         'updated_at': DateTime.now().toIso8601String(),
       },
@@ -827,6 +872,7 @@ CREATE TABLE IF NOT EXISTS products (
         'id': p.id,
         'client_id': p.clientId,
         'erp_name': p.erpName,
+        'erp_modified': p.erpModified,
         'sync_status': p.syncStatus.name,
         'last_error': p.lastError,
         'item_code': p.itemCode,
@@ -875,6 +921,8 @@ CREATE TABLE IF NOT EXISTS products (
       id: '${r['id']}',
       clientId: '${r['client_id']}',
       erpName: r['erp_name'] == null ? null : '${r['erp_name']}',
+      erpModified:
+          r['erp_modified'] == null ? null : '${r['erp_modified']}',
       syncStatus: _syncStatusFrom('${r['sync_status']}'),
       lastError: r['last_error'] == null ? null : '${r['last_error']}',
       itemCode: '${r['item_code']}',
@@ -915,6 +963,29 @@ CREATE TABLE IF NOT EXISTS products (
     );
   }
 
+  Future<void> deleteCustomerRow(String id, {DatabaseExecutor? executor}) async {
+    final db = executor ?? await database;
+    await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> deleteProductRow(String id, {DatabaseExecutor? executor}) async {
+    final db = executor ?? await database;
+    await db.delete('products', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> clearQueueForEntity(
+    String entityType,
+    String entityId, {
+    DatabaseExecutor? executor,
+  }) async {
+    final db = executor ?? await database;
+    await db.delete(
+      'sync_queue',
+      where: 'entity_type = ? AND entity_id = ?',
+      whereArgs: [entityType, entityId],
+    );
+  }
+
   // --- sync queue ---
 
   Future<void> enqueue({
@@ -938,7 +1009,7 @@ CREATE TABLE IF NOT EXISTS products (
       'op': op,
       'method': method,
       'args_json': jsonEncode(args),
-      'status': 'queued',
+      'status': 'pending',
       'attempts': 0,
       'last_error': null,
       'created_at': DateTime.now().toIso8601String(),
@@ -946,7 +1017,7 @@ CREATE TABLE IF NOT EXISTS products (
   }
 
   Future<List<SyncQueueItem>> peekQueue({
-    List<String> statuses = const ['queued', 'awaiting_erp'],
+    List<String> statuses = const ['pending', 'retry'],
   }) async {
     final db = await database;
     final placeholders = List.filled(statuses.length, '?').join(',');
@@ -965,7 +1036,7 @@ CREATE TABLE IF NOT EXISTS products (
       // Customers first so sales/collections can resolve ERP names.
       final rows = await txn.rawQuery('''
 SELECT * FROM sync_queue
-WHERE status = 'queued'
+WHERE status IN ('pending', 'retry', 'queued')
 ORDER BY CASE entity_type
   WHEN 'customer' THEN 0
   WHEN 'product' THEN 1
@@ -976,7 +1047,7 @@ LIMIT 1
       final item = _queueFromRow(rows.first);
       await txn.update(
         'sync_queue',
-        {'status': 'in_flight', 'attempts': item.attempts + 1},
+        {'status': 'uploading', 'attempts': item.attempts + 1},
         where: 'id = ?',
         whereArgs: [item.id],
       );
@@ -988,7 +1059,7 @@ LIMIT 1
         op: item.op,
         method: item.method,
         args: item.args,
-        status: 'in_flight',
+        status: 'uploading',
         attempts: item.attempts + 1,
         createdAt: item.createdAt,
         lastError: item.lastError,
@@ -1021,13 +1092,42 @@ LIMIT 1
     );
   }
 
+  Future<void> markQueueConflict(String id, String error) async {
+    final db = await database;
+    await db.update(
+      'sync_queue',
+      {'status': 'conflict', 'last_error': error},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> markQueueRetry(String id) async {
+    final db = await database;
+    await db.update(
+      'sync_queue',
+      {'status': 'retry', 'last_error': null},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> requeueFailed(String id) async {
     final db = await database;
     await db.update(
       'sync_queue',
-      {'status': 'queued', 'last_error': null},
-      where: 'id = ? AND status = ?',
-      whereArgs: [id, 'failed'],
+      {'status': 'retry', 'last_error': null},
+      where: 'id = ? AND status IN (?, ?, ?)',
+      whereArgs: [id, 'failed', 'conflict', 'retry'],
+    );
+  }
+
+  Future<int> requeueAllFailed() async {
+    final db = await database;
+    return db.update(
+      'sync_queue',
+      {'status': 'retry', 'last_error': null},
+      where: "status IN ('failed','conflict')",
     );
   }
 
@@ -1035,10 +1135,55 @@ LIMIT 1
     final db = await database;
     await db.update(
       'sync_queue',
-      {'status': 'queued'},
-      where: 'status = ?',
-      whereArgs: ['in_flight'],
+      {'status': 'pending'},
+      where: "status IN ('uploading','in_flight')",
     );
+  }
+
+  Future<void> addSyncLog({
+    required String level,
+    required String message,
+    String? entityType,
+    String? entityId,
+    String? queueId,
+  }) async {
+    final db = await database;
+    await db.insert('sync_logs', {
+      'id': newLocalId('log'),
+      'level': level,
+      'message': message,
+      'entity_type': entityType,
+      'entity_id': entityId,
+      'queue_id': queueId,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+    // Keep last 500
+    await db.rawDelete('''
+DELETE FROM sync_logs WHERE id NOT IN (
+  SELECT id FROM sync_logs ORDER BY created_at DESC LIMIT 500
+)
+''');
+  }
+
+  Future<List<Map<String, Object?>>> listSyncLogs({int limit = 100}) async {
+    final db = await database;
+    return db.query(
+      'sync_logs',
+      orderBy: 'created_at DESC',
+      limit: limit,
+    );
+  }
+
+  Future<List<SyncQueueItem>> listQueueByStatuses(List<String> statuses) async {
+    final db = await database;
+    final placeholders = List.filled(statuses.length, '?').join(',');
+    final rows = await db.query(
+      'sync_queue',
+      where: 'status IN ($placeholders)',
+      whereArgs: statuses,
+      orderBy: 'created_at ASC',
+    );
+    return rows.map(_queueFromRow).toList(growable: false);
   }
 
   Future<Map<String, int>> syncCounts() async {
@@ -1047,14 +1192,31 @@ LIMIT 1
       'SELECT status, COUNT(*) AS c FROM sync_queue GROUP BY status',
     );
     final out = <String, int>{
+      'pending': 0,
+      'uploading': 0,
+      'uploaded': 0,
+      'conflict': 0,
+      'failed': 0,
+      'retry': 0,
+      // legacy keys for Today chips
       'queued': 0,
       'in_flight': 0,
       'awaiting_erp': 0,
-      'failed': 0,
     };
     for (final r in rows) {
-      out['${r['status']}'] = (r['c'] as num).toInt();
+      final status = '${r['status']}';
+      final c = (r['c'] as num).toInt();
+      out[status] = c;
+      if (status == 'pending' || status == 'queued') {
+        out['queued'] = (out['queued'] ?? 0) + c;
+        out['pending'] = (out['pending'] ?? 0) + (status == 'pending' ? c : 0);
+      }
+      if (status == 'uploading' || status == 'in_flight') {
+        out['in_flight'] = (out['in_flight'] ?? 0) + c;
+        out['uploading'] = (out['uploading'] ?? 0) + (status == 'uploading' ? c : 0);
+      }
     }
+    out['pending'] = (out['pending'] ?? 0) + (out['retry'] ?? 0);
     return out;
   }
 
@@ -1068,7 +1230,7 @@ LIMIT 1
         .where((s) => s.visitStatus == VisitStatus.completed)
         .length;
     final queuedOrders = orders
-        .where((o) => o.syncStatus != SyncStatus.synced)
+        .where((o) => o.syncStatus != SyncStatus.uploaded)
         .length;
     final collected = collections.fold<double>(0, (s, c) => s + c.amount);
     return DaySummary(
@@ -1081,6 +1243,8 @@ LIMIT 1
       syncInFlight: counts['in_flight'] ?? 0,
       syncAwaitingErp: counts['awaiting_erp'] ?? 0,
       syncFailed: counts['failed'] ?? 0,
+      syncConflict: counts['conflict'] ?? 0,
+      syncRetry: counts['retry'] ?? 0,
     );
   }
 
@@ -1156,12 +1320,14 @@ LIMIT 1
 
   SyncStatus _syncStatusFrom(String raw) {
     return switch (raw) {
-      'queued' => SyncStatus.queued,
-      'inFlight' || 'in_flight' => SyncStatus.inFlight,
-      'awaitingErp' || 'awaiting_erp' => SyncStatus.awaitingErp,
-      'synced' => SyncStatus.synced,
+      'pending' || 'queued' || 'awaitingErp' || 'awaiting_erp' =>
+        SyncStatus.pending,
+      'uploading' || 'inFlight' || 'in_flight' => SyncStatus.uploading,
+      'uploaded' || 'synced' => SyncStatus.uploaded,
+      'conflict' => SyncStatus.conflict,
       'failed' => SyncStatus.failed,
-      _ => SyncStatus.queued,
+      'retry' => SyncStatus.retry,
+      _ => SyncStatus.pending,
     };
   }
 }

@@ -1,4 +1,22 @@
-enum SyncStatus { queued, inFlight, awaitingErp, synced, failed }
+enum SyncStatus {
+  /// Waiting to upload (Pending).
+  pending,
+
+  /// Currently uploading.
+  uploading,
+
+  /// Successfully uploaded / synced.
+  uploaded,
+
+  /// Server modified is newer than local base.
+  conflict,
+
+  /// Last attempt failed.
+  failed,
+
+  /// Marked for automatic/manual retry.
+  retry,
+}
 
 enum VisitStatus { planned, checkedIn, completed, skipped }
 
@@ -160,6 +178,8 @@ class DaySummary {
     required this.syncInFlight,
     required this.syncAwaitingErp,
     required this.syncFailed,
+    this.syncConflict = 0,
+    this.syncRetry = 0,
   });
 
   final int stopsTotal;
@@ -171,6 +191,8 @@ class DaySummary {
   final int syncInFlight;
   final int syncAwaitingErp;
   final int syncFailed;
+  final int syncConflict;
+  final int syncRetry;
 }
 
 class SyncQueueItem {

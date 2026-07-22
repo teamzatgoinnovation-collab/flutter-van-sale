@@ -37,6 +37,7 @@ class ProductModel {
     this.imagePath,
     this.galleryPaths = const [],
     this.erpName,
+    this.erpModified,
     this.lastError,
   });
 
@@ -78,6 +79,8 @@ class ProductModel {
 
   final SyncStatus syncStatus;
   final String? erpName;
+  /// Last known ERPNext `modified` — used for conflict detection.
+  final String? erpModified;
   final String? lastError;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -88,6 +91,7 @@ class ProductModel {
   ProductModel copyWith({
     SyncStatus? syncStatus,
     String? erpName,
+    String? erpModified,
     String? lastError,
   }) {
     return ProductModel(
@@ -124,6 +128,7 @@ class ProductModel {
       galleryPaths: galleryPaths,
       syncStatus: syncStatus ?? this.syncStatus,
       erpName: erpName ?? this.erpName,
+      erpModified: erpModified ?? this.erpModified,
       lastError: lastError,
       createdAt: createdAt,
       updatedAt: updatedAt,

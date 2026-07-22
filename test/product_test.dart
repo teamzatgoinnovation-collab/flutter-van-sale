@@ -45,7 +45,7 @@ void main() {
       ..openingWarehouse = 'Stores - EZ';
 
     final created = await repo.createLocal(draft);
-    expect(created.syncStatus, SyncStatus.queued);
+    expect(created.syncStatus, SyncStatus.pending);
     final queue = await VanSaleDb.instance.peekQueue();
     expect(queue.any((q) => q.entityType == 'product'), isTrue);
     final stock = await VanSaleDb.instance.getStock('VS-TEST-1');
