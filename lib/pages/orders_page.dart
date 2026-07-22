@@ -8,6 +8,8 @@ import '../data/van_sale_repo.dart';
 import '../models/models.dart';
 import '../product/models/product_model.dart';
 import '../product/pages/product_form_page.dart';
+import '../product/pages/product_search_page.dart';
+import '../product/repositories/product_repository.dart';
 import '../services/auth_scope.dart';
 import '../services/session.dart';
 import '../services/sync_service.dart';
@@ -111,6 +113,37 @@ class _OrdersPageState extends State<OrdersPage> {
     );
     if (created == null) return null;
     return created.displayName;
+  }
+
+  Future<StockLine?> _pickProduct() async {
+    final session = _session;
+    if (session == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session unavailable')),
+      );
+      return null;
+    }
+    final picked = await Navigator.of(context).push<ProductModel>(
+      MaterialPageRoute(
+        builder: (_) => ProductSearchPage(
+          session: session,
+          sync: widget.sync,
+          selectMode: true,
+        ),
+      ),
+    );
+    if (picked == null) return null;
+    await productRepository.markRecent(picked.id);
+    final existing = await vanSaleRepo.getStock(picked.displayCode) ??
+        await vanSaleRepo.getStock(picked.itemCode);
+    return existing ??
+        StockLine(
+          itemCode: picked.displayCode,
+          itemName: picked.itemName,
+          qty: picked.stockQty,
+          uom: picked.stockUom,
+          unitPrice: picked.displayPrice,
+        );
   }
 
   Future<StockLine?> _createProductDialog() async {
@@ -225,32 +258,54 @@ class _OrdersPageState extends State<OrdersPage> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: () async {
-                          final line = await _createProductDialog();
-                          if (line == null) return;
-                          setLocal(() {
-                            stock = [
-                              ...stock.where(
-                                (s) => s.itemCode != line.itemCode,
-                              ),
-                              line,
-                            ];
-                            qtys[line.itemCode] = qtys[line.itemCode] ?? 0;
-                          });
-                        },
-                        icon: const Icon(Icons.add_box_outlined, size: 18),
-                        label: const Text('New product'),
-                      ),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        FilledButton.tonalIcon(
+                          onPressed: () async {
+                            final line = await _pickProduct();
+                            if (line == null) return;
+                            setLocal(() {
+                              stock = [
+                                ...stock.where(
+                                  (s) => s.itemCode != line.itemCode,
+                                ),
+                                line,
+                              ];
+                              qtys[line.itemCode] =
+                                  (qtys[line.itemCode] ?? 0) > 0
+                                      ? qtys[line.itemCode]!
+                                      : 1;
+                            });
+                          },
+                          icon: const Icon(Icons.search, size: 18),
+                          label: const Text('Search product'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final line = await _createProductDialog();
+                            if (line == null) return;
+                            setLocal(() {
+                              stock = [
+                                ...stock.where(
+                                  (s) => s.itemCode != line.itemCode,
+                                ),
+                                line,
+                              ];
+                              qtys[line.itemCode] = qtys[line.itemCode] ?? 0;
+                            });
+                          },
+                          icon: const Icon(Icons.add_box_outlined, size: 18),
+                          label: const Text('New'),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     if (stock.isEmpty)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 12),
                         child: Text(
-                          'No van stock yet. Create a product (and load qty) '
+                          'No van stock yet. Search products, create one, '
                           'or Sync after setting warehouse.',
                         ),
                       )

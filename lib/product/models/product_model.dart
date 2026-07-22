@@ -39,6 +39,9 @@ class ProductModel {
     this.erpName,
     this.erpModified,
     this.lastError,
+    this.isFavorite = false,
+    this.stockQty = 0,
+    this.stockUnitPrice,
   });
 
   final String id;
@@ -85,14 +88,44 @@ class ProductModel {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  final bool isFavorite;
+  /// Joined from van_stock when searching (0 if missing).
+  final double stockQty;
+  /// Van stock unit price when joined; falls back to [sellingRate].
+  final double? stockUnitPrice;
+
   String get displayCode =>
       (erpName != null && erpName!.isNotEmpty) ? erpName! : itemCode;
+
+  double get displayPrice => stockUnitPrice ?? sellingRate;
+
+  bool get inStock => stockQty > 0;
+
+  bool get lowStock {
+    if (reorderLevel != null) return stockQty <= reorderLevel!;
+    return stockQty > 0 && stockQty <= 5;
+  }
+
+  String get subtitle {
+    final parts = <String>[
+      itemCode,
+      if ((brand ?? '').trim().isNotEmpty) brand!.trim(),
+      if (itemGroup.trim().isNotEmpty) itemGroup.trim(),
+      if ((sku ?? '').trim().isNotEmpty) 'SKU ${sku!.trim()}',
+    ];
+    return parts.join(' · ');
+  }
 
   ProductModel copyWith({
     SyncStatus? syncStatus,
     String? erpName,
     String? erpModified,
     String? lastError,
+    bool? isFavorite,
+    double? stockQty,
+    double? stockUnitPrice,
+    String? imagePath,
+    List<String>? galleryPaths,
   }) {
     return ProductModel(
       id: id,
@@ -124,17 +157,38 @@ class ProductModel {
       incomeAccount: incomeAccount,
       expenseAccount: expenseAccount,
       costCenter: costCenter,
-      imagePath: imagePath,
-      galleryPaths: galleryPaths,
+      imagePath: imagePath ?? this.imagePath,
+      galleryPaths: galleryPaths ?? this.galleryPaths,
       syncStatus: syncStatus ?? this.syncStatus,
       erpName: erpName ?? this.erpName,
       erpModified: erpModified ?? this.erpModified,
       lastError: lastError,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      isFavorite: isFavorite ?? this.isFavorite,
+      stockQty: stockQty ?? this.stockQty,
+      stockUnitPrice: stockUnitPrice ?? this.stockUnitPrice,
     );
   }
 }
+
+class ProductSearchResult {
+  const ProductSearchResult({
+    required this.items,
+    required this.total,
+    required this.limit,
+    required this.offset,
+    required this.hasMore,
+  });
+
+  final List<ProductModel> items;
+  final int total;
+  final int limit;
+  final int offset;
+  final bool hasMore;
+}
+
+enum ProductSearchScope { all, recent, frequent, favorites }
 
 class ProductDefaults {
   const ProductDefaults({

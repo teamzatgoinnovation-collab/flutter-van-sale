@@ -76,75 +76,92 @@ class ProductRepository {
   /// Pull ERP catalog into local products (does not wipe pending local creates).
   Future<int> refreshFromErp(VanSaleSession session) async {
     if (!session.connected) return 0;
+    var count = 0;
     try {
-      final env = await session.store.callMethod(
-        ProductApiMethods.list,
-        args: {'page': 1, 'page_size': 100},
-      );
-      final data = env.data;
-      List rows = const [];
-      if (data is List) {
-        rows = data;
-      } else if (data is Map && data['data'] is List) {
-        rows = data['data'] as List;
-      }
-      var count = 0;
-      for (final raw in rows) {
-        if (raw is! Map) continue;
-        final map = Map<String, dynamic>.from(raw);
-        final code = '${map['item_code'] ?? map['id'] ?? map['name'] ?? ''}';
-        if (code.isEmpty) continue;
-        final existing = await db.getProductByCode(code);
-        if (existing != null &&
-            existing.syncStatus != SyncStatus.uploaded &&
-            existing.erpName == null) {
-          // Keep offline draft with same code
-          continue;
-        }
-        final now = DateTime.now();
-        await db.upsertProduct(
-          ProductModel(
-            id: existing?.id ?? 'erp_$code',
-            clientId: existing?.clientId ?? 'erp_$code',
-            itemCode: code,
-            itemName: '${map['item_name'] ?? map['name'] ?? code}',
-            itemGroup: '${map['item_group'] ?? _defaults.itemGroup}',
-            stockUom: '${map['stock_uom'] ?? _defaults.stockUom}',
-            sellingRate: (map['standard_rate'] as num?)?.toDouble() ??
-                (map['rate'] as num?)?.toDouble() ??
-                0,
-            barcode: map['barcode'] == null ? null : '${map['barcode']}',
-            maintainStock: true,
-            disabled: (map['disabled'] as num?)?.toInt() == 1,
-            syncStatus: SyncStatus.uploaded,
-            erpName: code,
-            erpModified: map['modified'] == null
-                ? existing?.erpModified
-                : '${map['modified']}',
-            imagePath: existing?.imagePath,
-            galleryPaths: existing?.galleryPaths ?? const [],
-            createdAt: existing?.createdAt ?? now,
-            updatedAt: now,
-          ),
+      for (var page = 1; page <= 10; page++) {
+        final env = await session.store.callMethod(
+          ProductApiMethods.list,
+          args: {'page': page, 'page_size': 100},
         );
-        // Mirror into van_stock if missing (qty 0 until Bin pull)
-        final stock = await db.getStock(code);
-        if (stock == null) {
-          await db.upsertStockLine(
-            StockLine(
+        final data = env.data;
+        List rows = const [];
+        if (data is List) {
+          rows = data;
+        } else if (data is Map && data['data'] is List) {
+          rows = data['data'] as List;
+        }
+        if (rows.isEmpty) break;
+
+        for (final raw in rows) {
+          if (raw is! Map) continue;
+          final map = Map<String, dynamic>.from(raw);
+          final code = '${map['item_code'] ?? map['id'] ?? map['name'] ?? ''}';
+          if (code.isEmpty) continue;
+          final existing = await db.getProductByCode(code);
+          if (existing != null &&
+              existing.syncStatus != SyncStatus.uploaded &&
+              existing.erpName == null) {
+            continue;
+          }
+          final now = DateTime.now();
+          final rate = (map['standard_rate'] as num?)?.toDouble() ??
+              (map['rate'] as num?)?.toDouble() ??
+              existing?.sellingRate ??
+              0;
+          await db.upsertProduct(
+            ProductModel(
+              id: existing?.id ?? 'erp_$code',
+              clientId: existing?.clientId ?? 'erp_$code',
               itemCode: code,
-              itemName: '${map['item_name'] ?? code}',
-              qty: 0,
-              uom: '${map['stock_uom'] ?? 'Nos'}',
-              unitPrice: (map['standard_rate'] as num?)?.toDouble() ?? 0,
+              itemName: '${map['item_name'] ?? map['name'] ?? code}',
+              itemNameAr: map['item_name_ar'] == null
+                  ? existing?.itemNameAr
+                  : '${map['item_name_ar']}',
+              itemGroup:
+                  '${map['item_group'] ?? existing?.itemGroup ?? _defaults.itemGroup}',
+              stockUom:
+                  '${map['stock_uom'] ?? existing?.stockUom ?? _defaults.stockUom}',
+              brand: map['brand'] == null ? existing?.brand : '${map['brand']}',
+              barcode: map['barcode'] == null
+                  ? existing?.barcode
+                  : '${map['barcode']}',
+              sku: map['sku'] == null ? existing?.sku : '${map['sku']}',
+              sellingRate: rate,
+              maintainStock: true,
+              disabled: (map['disabled'] as num?)?.toInt() == 1,
+              syncStatus: SyncStatus.uploaded,
+              erpName: code,
+              erpModified: map['modified'] == null
+                  ? existing?.erpModified
+                  : '${map['modified']}',
+              imagePath: existing?.imagePath ??
+                  (map['image'] == null || '${map['image']}'.isEmpty
+                      ? null
+                      : '${map['image']}'),
+              galleryPaths: existing?.galleryPaths ?? const [],
+              createdAt: existing?.createdAt ?? now,
+              updatedAt: now,
             ),
           );
+          final stock = await db.getStock(code);
+          if (stock == null) {
+            await db.upsertStockLine(
+              StockLine(
+                itemCode: code,
+                itemName: '${map['item_name'] ?? code}',
+                qty: 0,
+                uom: '${map['stock_uom'] ?? 'Nos'}',
+                unitPrice: rate,
+              ),
+            );
+          }
+          count++;
         }
-        count++;
+        if (rows.length < 100) break;
       }
       return count;
     } catch (_) {
-      return 0;
+      return count;
     }
   }
 
@@ -152,6 +169,34 @@ class ProductRepository {
       db.listProducts(query: query);
 
   Future<ProductModel?> get(String id) => db.getProduct(id);
+
+  Future<ProductSearchResult> search({
+    String? query,
+    int limit = 30,
+    int offset = 0,
+    ProductSearchScope scope = ProductSearchScope.all,
+  }) {
+    return db.searchProducts(
+      query: query,
+      limit: limit,
+      offset: offset,
+      favoritesOnly: scope == ProductSearchScope.favorites,
+      recentOnly: scope == ProductSearchScope.recent,
+      frequentOnly: scope == ProductSearchScope.frequent,
+    );
+  }
+
+  Future<ProductModel?> findByBarcode(String barcode) =>
+      db.findProductByBarcode(barcode);
+
+  Future<void> toggleFavorite(String productId, {required bool favorite}) =>
+      db.setProductFavorite(productId, favorite);
+
+  Future<void> markRecent(String productId) =>
+      db.touchProductRecent(productId);
+
+  Future<void> recordSales(List<OrderLine> lines) =>
+      db.recordProductSales(lines);
 
   Future<ProductModel> createLocal(ProductDraft draft) async {
     draft.applyDefaults(_defaults);

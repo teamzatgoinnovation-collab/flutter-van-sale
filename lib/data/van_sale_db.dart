@@ -46,7 +46,7 @@ class VanSaleDb {
     final path = p.join(dir, 'van_sale.db');
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await _createV1(db);
         await _createCustomersTable(db);
@@ -54,6 +54,7 @@ class VanSaleDb {
         await _createCustomerSearchTables(db);
         await _createProductsTable(db);
         await _createProductIndexes(db);
+        await _createProductSearchTables(db);
         await _createSyncLogsTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -94,6 +95,10 @@ class VanSaleDb {
           } catch (_) {}
           await _createCustomerSearchTables(db);
           await _createCustomerSearchIndexes(db);
+        }
+        if (oldVersion < 6) {
+          await _createProductSearchTables(db);
+          await _createProductSearchIndexes(db);
         }
       },
     );
@@ -320,6 +325,54 @@ CREATE TABLE IF NOT EXISTS products (
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)',
+    );
+    await _createProductSearchIndexes(db);
+  }
+
+  Future<void> _createProductSearchTables(DatabaseExecutor db) async {
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS product_favorites (
+  product_id TEXT PRIMARY KEY NOT NULL,
+  created_at TEXT NOT NULL
+)''');
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS product_recent (
+  product_id TEXT PRIMARY KEY NOT NULL,
+  used_at TEXT NOT NULL
+)''');
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS product_sales_stats (
+  item_code TEXT PRIMARY KEY NOT NULL,
+  sold_qty REAL NOT NULL DEFAULT 0,
+  sold_count INTEGER NOT NULL DEFAULT 0,
+  last_sold_at TEXT NOT NULL
+)''');
+  }
+
+  Future<void> _createProductSearchIndexes(DatabaseExecutor db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_name ON products(item_name)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_name_ar ON products(item_name_ar)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_code ON products(item_code)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_group ON products(item_group)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_product_recent_used ON product_recent(used_at DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_product_sales_qty ON product_sales_stats(sold_qty DESC)',
     );
   }
 
@@ -1001,24 +1054,228 @@ DELETE FROM customer_recent WHERE customer_id NOT IN (
   }
 
   Future<List<ProductModel>> listProducts({String? query}) async {
+    final page = await searchProducts(query: query, limit: 5000, offset: 0);
+    return page.items;
+  }
+
+  /// Offline multi-field product search with stock join + pagination.
+  Future<ProductSearchResult> searchProducts({
+    String? query,
+    int limit = 30,
+    int offset = 0,
+    bool favoritesOnly = false,
+    bool recentOnly = false,
+    bool frequentOnly = false,
+  }) async {
     final db = await database;
-    final rows = await db.query(
-      'products',
-      where: 'disabled = 0',
-      orderBy: 'item_name COLLATE NOCASE ASC',
+    final where = <String>['p.disabled = 0'];
+    final args = <Object?>[];
+
+    final q = query?.trim() ?? '';
+    if (q.isNotEmpty) {
+      final like = '%$q%';
+      where.add('''(
+  p.item_code LIKE ? COLLATE NOCASE
+  OR p.item_name LIKE ? COLLATE NOCASE
+  OR p.item_name_ar LIKE ? COLLATE NOCASE
+  OR p.barcode LIKE ?
+  OR p.sku LIKE ? COLLATE NOCASE
+  OR p.brand LIKE ? COLLATE NOCASE
+  OR p.item_group LIKE ? COLLATE NOCASE
+  OR p.erp_name LIKE ? COLLATE NOCASE
+  OR CAST(p.selling_rate AS TEXT) LIKE ?
+)''');
+      args.addAll([like, like, like, like, like, like, like, like, like]);
+    }
+
+    final whereSql = where.join(' AND ');
+    late final String countSql;
+    late final String listSql;
+
+    if (favoritesOnly) {
+      countSql =
+          'SELECT COUNT(*) AS c FROM products p INNER JOIN product_favorites f ON f.product_id = p.id WHERE $whereSql';
+      listSql = '''
+SELECT p.*,
+  1 AS is_favorite,
+  COALESCE(s.qty, 0) AS stock_qty,
+  COALESCE(s.unit_price, p.selling_rate) AS stock_unit_price
+FROM products p
+INNER JOIN product_favorites f ON f.product_id = p.id
+LEFT JOIN van_stock s ON s.item_code = p.item_code
+WHERE $whereSql
+ORDER BY f.created_at DESC
+LIMIT ? OFFSET ?
+''';
+    } else if (recentOnly) {
+      countSql =
+          'SELECT COUNT(*) AS c FROM products p INNER JOIN product_recent r ON r.product_id = p.id WHERE $whereSql';
+      listSql = '''
+SELECT p.*,
+  CASE WHEN fav.product_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite,
+  COALESCE(s.qty, 0) AS stock_qty,
+  COALESCE(s.unit_price, p.selling_rate) AS stock_unit_price
+FROM products p
+INNER JOIN product_recent r ON r.product_id = p.id
+LEFT JOIN product_favorites fav ON fav.product_id = p.id
+LEFT JOIN van_stock s ON s.item_code = p.item_code
+WHERE $whereSql
+ORDER BY r.used_at DESC
+LIMIT ? OFFSET ?
+''';
+    } else if (frequentOnly) {
+      countSql = '''
+SELECT COUNT(*) AS c FROM products p
+INNER JOIN product_sales_stats st ON st.item_code = p.item_code
+WHERE $whereSql AND st.sold_count > 0
+''';
+      listSql = '''
+SELECT p.*,
+  CASE WHEN fav.product_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite,
+  COALESCE(s.qty, 0) AS stock_qty,
+  COALESCE(s.unit_price, p.selling_rate) AS stock_unit_price
+FROM products p
+INNER JOIN product_sales_stats st ON st.item_code = p.item_code
+LEFT JOIN product_favorites fav ON fav.product_id = p.id
+LEFT JOIN van_stock s ON s.item_code = p.item_code
+WHERE $whereSql AND st.sold_count > 0
+ORDER BY st.sold_qty DESC, st.sold_count DESC
+LIMIT ? OFFSET ?
+''';
+    } else {
+      countSql = 'SELECT COUNT(*) AS c FROM products p WHERE $whereSql';
+      listSql = '''
+SELECT p.*,
+  CASE WHEN fav.product_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite,
+  COALESCE(s.qty, 0) AS stock_qty,
+  COALESCE(s.unit_price, p.selling_rate) AS stock_unit_price
+FROM products p
+LEFT JOIN product_favorites fav ON fav.product_id = p.id
+LEFT JOIN van_stock s ON s.item_code = p.item_code
+WHERE $whereSql
+ORDER BY p.item_name COLLATE NOCASE ASC
+LIMIT ? OFFSET ?
+''';
+    }
+
+    final countRows = await db.rawQuery(countSql, args);
+    final total = (countRows.first['c'] as num?)?.toInt() ?? 0;
+    final rows = await db.rawQuery(listSql, [...args, limit, offset]);
+    final items = rows.map(_productFromSearchRow).toList(growable: false);
+
+    return ProductSearchResult(
+      items: items,
+      total: total,
+      limit: limit,
+      offset: offset,
+      hasMore: offset + items.length < total,
     );
-    final all = rows.map(_productFromRow).toList();
-    final q = query?.trim().toLowerCase() ?? '';
-    if (q.isEmpty) return all;
-    return all
-        .where(
-          (p) =>
-              p.itemCode.toLowerCase().contains(q) ||
-              p.itemName.toLowerCase().contains(q) ||
-              (p.barcode ?? '').toLowerCase().contains(q) ||
-              (p.sku ?? '').toLowerCase().contains(q),
-        )
-        .toList(growable: false);
+  }
+
+  ProductModel _productFromSearchRow(Map<String, Object?> r) {
+    final model = _productFromRow(r);
+    return model.copyWith(
+      isFavorite: (r['is_favorite'] as num?)?.toInt() == 1,
+      stockQty: (r['stock_qty'] as num?)?.toDouble() ?? 0,
+      stockUnitPrice: (r['stock_unit_price'] as num?)?.toDouble(),
+    );
+  }
+
+  Future<ProductModel?> findProductByBarcode(String barcode) async {
+    final code = barcode.trim();
+    if (code.isEmpty) return null;
+    final db = await database;
+    final rows = await db.rawQuery(
+      '''
+SELECT p.*,
+  CASE WHEN fav.product_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite,
+  COALESCE(s.qty, 0) AS stock_qty,
+  COALESCE(s.unit_price, p.selling_rate) AS stock_unit_price
+FROM products p
+LEFT JOIN product_favorites fav ON fav.product_id = p.id
+LEFT JOIN van_stock s ON s.item_code = p.item_code
+WHERE p.disabled = 0 AND p.barcode = ?
+LIMIT 1
+''',
+      [code],
+    );
+    if (rows.isEmpty) return null;
+    return _productFromSearchRow(rows.first);
+  }
+
+  Future<void> setProductFavorite(String productId, bool favorite) async {
+    final db = await database;
+    if (favorite) {
+      await db.insert(
+        'product_favorites',
+        {
+          'product_id': productId,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } else {
+      await db.delete(
+        'product_favorites',
+        where: 'product_id = ?',
+        whereArgs: [productId],
+      );
+    }
+  }
+
+  Future<void> touchProductRecent(String productId) async {
+    final db = await database;
+    await db.insert(
+      'product_recent',
+      {
+        'product_id': productId,
+        'used_at': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await db.execute('''
+DELETE FROM product_recent WHERE product_id NOT IN (
+  SELECT product_id FROM (
+    SELECT product_id FROM product_recent ORDER BY used_at DESC LIMIT 50
+  )
+)''');
+  }
+
+  Future<void> recordProductSales(List<OrderLine> lines) async {
+    if (lines.isEmpty) return;
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      for (final line in lines) {
+        final existing = await txn.query(
+          'product_sales_stats',
+          where: 'item_code = ?',
+          whereArgs: [line.itemCode],
+          limit: 1,
+        );
+        if (existing.isEmpty) {
+          await txn.insert('product_sales_stats', {
+            'item_code': line.itemCode,
+            'sold_qty': line.qty,
+            'sold_count': 1,
+            'last_sold_at': now,
+          });
+        } else {
+          final row = existing.first;
+          await txn.update(
+            'product_sales_stats',
+            {
+              'sold_qty':
+                  ((row['sold_qty'] as num?)?.toDouble() ?? 0) + line.qty,
+              'sold_count': ((row['sold_count'] as num?)?.toInt() ?? 0) + 1,
+              'last_sold_at': now,
+            },
+            where: 'item_code = ?',
+            whereArgs: [line.itemCode],
+          );
+        }
+      }
+    });
   }
 
   Future<ProductModel?> findProductDuplicate({

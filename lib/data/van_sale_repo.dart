@@ -170,6 +170,7 @@ class VanSaleRepo {
         executor: txn,
       );
     });
+    await db.recordProductSales(lines);
     return order;
   }
 

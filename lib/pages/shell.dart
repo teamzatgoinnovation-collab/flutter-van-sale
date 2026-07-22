@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../customer/pages/customer_search_page.dart';
+import '../product/pages/product_search_page.dart';
 import '../services/auth_scope.dart';
 import '../services/session.dart';
 import '../services/sync_service.dart';
@@ -104,6 +105,18 @@ class _VanSaleShellState extends State<VanSaleShell> {
     );
   }
 
+  void _openProducts() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProductSearchPage(
+          session: widget.session,
+          sync: widget.sync,
+          selectMode: false,
+        ),
+      ),
+    );
+  }
+
   Future<void> _syncNow() async {
     final result = await widget.sync.flush();
     if (!mounted) return;
@@ -192,6 +205,15 @@ class _VanSaleShellState extends State<VanSaleShell> {
                   onTap: () {
                     Navigator.pop(context);
                     _openCustomers();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.inventory_2_outlined),
+                  title: const Text('Products'),
+                  subtitle: const Text('Search · stock · price'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openProducts();
                   },
                 ),
                 ListTile(
