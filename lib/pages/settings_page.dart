@@ -61,7 +61,11 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _save() async {
     setState(() => _busy = true);
     final prefs = VanSalePrefs.instance;
-    await prefs.setSiteUrl(_url.text.trim());
+    final previousUrl = prefs.siteUrl;
+    final nextUrl = _url.text.trim().replaceAll(RegExp(r'/$'), '');
+    final siteChanged = nextUrl.isNotEmpty && nextUrl != previousUrl;
+
+    await prefs.setSiteUrl(nextUrl.isEmpty ? previousUrl : nextUrl);
     await prefs.setWarehouse(_warehouse.text.trim());
     await prefs.setCompany(_company.text.trim());
     await prefs.setWorkMode(_workMode);
@@ -74,6 +78,24 @@ class _SettingsPageState extends State<SettingsPage> {
 
     widget.session.updateBaseUrl(prefs.siteUrl);
     widget.sync.applyPrefs();
+
+    if (siteChanged) {
+      widget.sync.stopBackgroundSync();
+      final messenger = ScaffoldMessenger.of(context);
+      await widget.session.logout();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Site updated to ${prefs.siteUrl}. Sign in again for the new site.',
+          ),
+        ),
+      );
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+      return;
+    }
+
     if (VanSalePolicy.instance.backgroundSyncDesired &&
         widget.session.connected) {
       widget.sync.startBackgroundSync();
@@ -140,6 +162,8 @@ class _SettingsPageState extends State<SettingsPage> {
               labelText: 'Site URL',
               hintText: 'https://erp.zatgo.online',
               prefixIcon: Icon(Icons.link),
+              helperText:
+                  'Changing the site signs you out so you can log in fresh',
             ),
             keyboardType: TextInputType.url,
             autocorrect: false,
