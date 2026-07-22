@@ -1,5 +1,3 @@
-import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
-
 import '../../data/van_sale_db.dart';
 import '../../models/models.dart';
 import '../../services/prefs.dart';
@@ -8,6 +6,11 @@ import '../mappers/customer_sync_mapper.dart';
 import '../models/customer_model.dart';
 import '../validation/customer_validators.dart';
 
+/// ERPNext method paths for customer offline sync.
+abstract final class CustomerApiMethods {
+  static const defaults = 'zatgo_core.api.v1.accounting.customers.defaults';
+  static const sync = 'zatgo_core.api.v1.accounting.customers.sync';
+}
 /// Offline-first customer repository (local SQLite → ERPNext sync).
 class CustomerRepository {
   CustomerRepository(this.db, {CustomerSyncMapper mapper = const CustomerSyncMapper()})
@@ -38,7 +41,7 @@ class CustomerRepository {
     }
     try {
       final env = await session.store.callMethod(
-        ZatGoApiMethods.accountingCustomersDefaults,
+        CustomerApiMethods.defaults,
       );
       if (env.data is Map) {
         _defaults = CustomerDefaults.fromJson(
@@ -161,7 +164,7 @@ class CustomerRepository {
         entityType: 'customer',
         entityId: model.id,
         op: 'create',
-        method: ZatGoApiMethods.accountingCustomersSync,
+        method: CustomerApiMethods.sync,
         args: {
           'client_id': model.clientId,
           // Full payload rebuilt at flush from SQLite (attachments).

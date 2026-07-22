@@ -1,5 +1,3 @@
-import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
-
 import '../customer/repositories/customer_repository.dart';
 import '../data/van_sale_db.dart';
 import '../data/van_sale_repo.dart';
@@ -71,7 +69,7 @@ class SyncService {
 
   Future<Map<String, dynamic>> _resolveArgs(SyncQueueItem item) async {
     if (item.entityType == 'customer' &&
-        item.method == ZatGoApiMethods.accountingCustomersSync) {
+        item.method == CustomerApiMethods.sync) {
       final localId = '${item.args['local_id'] ?? item.entityId}';
       return customers.buildSyncArgs(localId);
     }
