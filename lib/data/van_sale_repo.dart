@@ -81,7 +81,15 @@ class VanSaleRepo {
       await db.metaSet('route_name', 'Van route');
       routeName = 'Van route';
 
-      final warehouse = VanSalePrefs.instance.warehouse.trim();
+      final profileWh =
+          session.context?.profile?.warehouse.trim() ?? '';
+      if (profileWh.isNotEmpty &&
+          VanSalePrefs.instance.warehouse.trim().isEmpty) {
+        await VanSalePrefs.instance.setWarehouse(profileWh);
+      }
+      final warehouse = VanSalePrefs.instance.warehouse.trim().isNotEmpty
+          ? VanSalePrefs.instance.warehouse.trim()
+          : profileWh;
       if (warehouse.isNotEmpty) {
         final stockEnv = await session.store.callMethod(
           ZatGoApiMethods.goVanStockList,

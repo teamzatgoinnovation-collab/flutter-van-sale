@@ -190,6 +190,16 @@ class _VanSaleShellState extends State<VanSaleShell> {
                     ],
                   ),
                 ),
+                if (widget.session.isAdmin)
+                  ListTile(
+                    leading: const Icon(Icons.dashboard_outlined),
+                    title: const Text('All vans'),
+                    subtitle: const Text('Switch to admin overview'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      widget.session.setPreferUserMode(false);
+                    },
+                  ),
                 ListTile(
                   leading: const Icon(Icons.settings_outlined),
                   title: const Text('Settings'),

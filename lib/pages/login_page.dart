@@ -6,10 +6,16 @@ import '../services/session.dart';
 import 'site_url_settings_page.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, required this.session, required this.onAuthed});
+  const LoginPage({
+    super.key,
+    required this.session,
+    required this.onAuthed,
+    this.accessMessage,
+  });
 
   final VanSaleSession session;
   final VoidCallback onAuthed;
+  final String? accessMessage;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -73,6 +79,22 @@ class _LoginPageState extends State<LoginPage>
     if (!mounted) return;
     setState(() => _busy = false);
     if (result is ErpnextLoginOk) {
+      if (!widget.session.hasVansaleAccess) {
+        final msg =
+            widget.session.lastError ??
+            'No VanSale User or VanSale Admin role on this account.';
+        await widget.session.logout();
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
+        return;
+      }
+      final wh = widget.session.context?.profile?.warehouse.trim() ?? '';
+      if (wh.isNotEmpty && VanSalePrefs.instance.warehouse.trim().isEmpty) {
+        await VanSalePrefs.instance.setWarehouse(wh);
+      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Signed in as ${result.session.fullName}')),
       );
@@ -162,6 +184,24 @@ class _LoginPageState extends State<LoginPage>
                           color: scheme.onSurfaceVariant,
                         ),
                       ),
+                      if (widget.accessMessage != null &&
+                          widget.accessMessage!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Material(
+                          color: scheme.errorContainer,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(
+                              widget.accessMessage!,
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: scheme.onErrorContainer,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       InkWell(
                         onTap: _busy ? null : _openSiteUrlSettings,
@@ -218,9 +258,8 @@ class _LoginPageState extends State<LoginPage>
                                   prefixIcon: const Icon(Icons.lock_outline),
                                   suffixIcon: IconButton(
                                     tooltip: _obscure ? 'Show' : 'Hide',
-                                    onPressed: () => setState(
-                                      () => _obscure = !_obscure,
-                                    ),
+                                    onPressed: () =>
+                                        setState(() => _obscure = !_obscure),
                                     icon: Icon(
                                       _obscure
                                           ? Icons.visibility_outlined

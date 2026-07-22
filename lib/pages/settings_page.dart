@@ -34,7 +34,12 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     final prefs = VanSalePrefs.instance;
     _url = TextEditingController(text: prefs.siteUrl);
-    _warehouse = TextEditingController(text: prefs.warehouse);
+    final profileWh =
+        widget.session.context?.profile?.warehouse.trim() ?? '';
+    final warehouse = prefs.warehouse.trim().isNotEmpty
+        ? prefs.warehouse
+        : profileWh;
+    _warehouse = TextEditingController(text: warehouse);
     _company = TextEditingController(text: prefs.company);
     _lowStock = TextEditingController(
       text: prefs.lowStockThreshold.toStringAsFixed(
@@ -176,15 +181,44 @@ class _SettingsPageState extends State<SettingsPage> {
           ListenableBuilder(
             listenable: session,
             builder: (context, _) {
-              return Card(
-                child: ListTile(
-                  title: Text(
-                    session.connected
-                        ? 'Signed in as ${session.fullName ?? session.user}'
-                        : 'Not signed in',
+              final profile = session.context?.profile;
+              return Column(
+                children: [
+                  Card(
+                    child: ListTile(
+                      title: Text(
+                        session.connected
+                            ? 'Signed in as ${session.fullName ?? session.user}'
+                            : 'Not signed in',
+                      ),
+                      subtitle: Text(
+                        [
+                          session.baseUrl,
+                          if (session.isAdmin) 'Role: VanSale Admin',
+                          if (session.isFieldUser) 'Role: VanSale User',
+                        ].join('\n'),
+                      ),
+                      isThreeLine: true,
+                    ),
                   ),
-                  subtitle: Text(session.baseUrl),
-                ),
+                  if (profile != null)
+                    Card(
+                      child: ListTile(
+                        title: const Text('Van profile'),
+                        subtitle: Text(
+                          [
+                            if (profile.warehouse.isNotEmpty)
+                              'Warehouse: ${profile.warehouse}',
+                            if ((profile.vehicle ?? '').isNotEmpty)
+                              'Vehicle: ${profile.vehicle}',
+                            if ((profile.routeTitle ?? '').isNotEmpty)
+                              'Route: ${profile.routeTitle}',
+                          ].join('\n'),
+                        ),
+                        isThreeLine: true,
+                      ),
+                    ),
+                ],
               );
             },
           ),

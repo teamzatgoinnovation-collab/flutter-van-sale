@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
 
-/// ERPNext password-session state for VanSale.
+import 'van_sale_api_methods.dart';
+import 'van_sale_context.dart';
+
+/// Password-session state for VanSale (user + admin).
 class VanSaleSession extends ChangeNotifier {
   VanSaleSession() {
     final base = const String.fromEnvironment(
@@ -17,8 +20,16 @@ class VanSaleSession extends ChangeNotifier {
   String? user;
   String? fullName;
   String? lastError;
+  VanSaleContext? context;
+  /// When admin also has user role: false = All vans, true = My van.
+  bool preferUserMode = false;
 
   bool get connected => store.connected;
+  bool get isAdmin => context?.isAdmin == true;
+  bool get isFieldUser => context?.isUser == true;
+  bool get hasVansaleAccess => context?.hasVansaleAccess == true;
+  bool get showAdminShell =>
+      isAdmin && !(preferUserMode && isFieldUser);
 
   void updateBaseUrl(String value) {
     baseUrl = value.replaceAll(RegExp(r'/$'), '');
@@ -35,13 +46,41 @@ class VanSaleSession extends ChangeNotifier {
       fullName = result.session.fullName;
       baseUrl = result.session.baseUrl;
       lastError = null;
+      try {
+        await loadContext();
+      } catch (e) {
+        lastError = 'Could not load VanSale roles: $e';
+      }
     } else if (result is ErpnextLoginFail) {
       user = null;
       fullName = null;
+      context = null;
       lastError = result.message;
     }
     notifyListeners();
     return result;
+  }
+
+  Future<void> loadContext() async {
+    if (!connected) {
+      context = null;
+      return;
+    }
+    final env = await store.callMethod(VanSaleApiMethods.meContext);
+    final data = env.data;
+    if (data is Map) {
+      context = VanSaleContext.fromJson(Map<String, dynamic>.from(data));
+      user = context!.user;
+      fullName = context!.fullName;
+    } else {
+      context = null;
+    }
+    notifyListeners();
+  }
+
+  void setPreferUserMode(bool value) {
+    preferUserMode = value;
+    notifyListeners();
   }
 
   Future<void> logout() async {
@@ -49,6 +88,8 @@ class VanSaleSession extends ChangeNotifier {
     user = null;
     fullName = null;
     lastError = null;
+    context = null;
+    preferUserMode = false;
     notifyListeners();
   }
 

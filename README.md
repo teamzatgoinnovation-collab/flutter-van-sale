@@ -22,14 +22,21 @@ flutter run
 
 ## App map
 
-| Tab | Role |
-|-----|------|
-| Today | Route stops, visit status, sync |
-| Sell | Sales from van stock |
-| Cash | Collections |
-| Stock | Van warehouse balances |
+| Mode | Tabs |
+|------|------|
+| **VanSale User** | Today · Sell · Cash · Stock |
+| **VanSale Admin** | Overview · Routes · Sales · Cash (read/monitor + filters) |
 
-**Drawer:** Settings (site URL, warehouse, company), Sync, Sign out
+**Drawer:** Settings (site URL, warehouse, company), Sync, Sign out. Admins with both roles can switch **My van** / **All vans**.
+
+## Desk setup (roles + vans)
+
+1. Create field users → assign role **VanSale User**.
+2. Create supervisor(s) → assign role **VanSale Admin** (optionally also User for dual mode).
+3. For each van user, create **ZG Van Sale Profile**: `user`, `warehouse`, optional `vehicle` / `route_title`.
+4. Assign **ZG Trip** rows with matching `sales_user` / warehouse (or backfill from profile).
+
+Default site: `https://erp.zatgo.online` (or demo). Hard-refresh Desk after migrate.
 
 ## Offline + sync
 

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'data/van_sale_db.dart';
 import 'data/van_sale_repo.dart';
 import 'core/di/van_sale_services.dart';
+import 'pages/admin_shell.dart';
 import 'pages/login_page.dart';
 import 'pages/shell.dart';
 import 'product/models/product_model.dart';
@@ -39,6 +40,7 @@ class VanSaleApp extends StatefulWidget {
 
 class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
   bool _showLogin = true;
+  String? _accessBlock;
   late final SyncService _sync;
 
   bool get _authed => widget.session.connected;
@@ -55,13 +57,13 @@ class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
       products: VanSaleServices.instance.products,
     );
     _syncGate();
-    widget.session.addListener(_syncGate);
+    widget.session.addListener(_onSessionChanged);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    widget.session.removeListener(_syncGate);
+    widget.session.removeListener(_onSessionChanged);
     _sync.stopBackgroundSync();
     _sync.dispose();
     super.dispose();
@@ -78,13 +80,24 @@ class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
     }
   }
 
+  void _onSessionChanged() {
+    _syncGate();
+    if (mounted) setState(() {});
+  }
+
   void _syncGate() {
     final authed = _authed;
     if (_showLogin == !authed) {
       // Already showing the correct root — ignore session noise.
+      // Keep any accessBlock banner on the login screen.
+      if (!authed) return;
+      setState(() {});
       return;
     }
-    setState(() => _showLogin = !authed);
+    setState(() {
+      _showLogin = !authed;
+      if (authed) _accessBlock = null;
+    });
     if (authed) {
       _afterAuth();
     } else {
@@ -92,7 +105,34 @@ class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _applyProfileWarehouse() async {
+    final wh = widget.session.context?.profile?.warehouse.trim() ?? '';
+    if (wh.isNotEmpty && VanSalePrefs.instance.warehouse.trim().isEmpty) {
+      await VanSalePrefs.instance.setWarehouse(wh);
+    }
+  }
+
   Future<void> _afterAuth() async {
+    try {
+      if (widget.session.context == null) {
+        await widget.session.loadContext();
+      }
+    } catch (e) {
+      debugPrint('VanSale context after auth: $e');
+    }
+    if (!widget.session.hasVansaleAccess) {
+      final msg =
+          widget.session.lastError ??
+          'No VanSale User or VanSale Admin role on this account.';
+      await widget.session.logout();
+      if (!mounted) return;
+      setState(() {
+        _showLogin = true;
+        _accessBlock = msg;
+      });
+      return;
+    }
+    await _applyProfileWarehouse();
     _sync.applyPrefs();
     if (VanSalePolicy.instance.backgroundSyncDesired) {
       _sync.startBackgroundSync();
@@ -108,25 +148,37 @@ class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final home = _showLogin
+        ? LoginPage(
+            session: widget.session,
+            accessMessage: _accessBlock,
+            onAuthed: () {
+              setState(() {
+                _showLogin = false;
+                _accessBlock = null;
+              });
+              _afterAuth();
+            },
+          )
+        : widget.session.showAdminShell
+        ? AdminShell(
+            session: widget.session,
+            sync: _sync,
+            onRequireLogin: () => setState(() => _showLogin = true),
+          )
+        : VanSaleShell(
+            session: widget.session,
+            sync: _sync,
+            onRequireLogin: () => setState(() => _showLogin = true),
+          );
+
     return MaterialApp(
       title: 'VanSale',
       debugShowCheckedModeBanner: false,
       theme: buildVanSaleTheme(brightness: Brightness.light),
       darkTheme: buildVanSaleTheme(brightness: Brightness.dark),
       themeMode: ThemeMode.system,
-      home: _showLogin
-          ? LoginPage(
-              session: widget.session,
-              onAuthed: () {
-                setState(() => _showLogin = false);
-                _afterAuth();
-              },
-            )
-          : VanSaleShell(
-              session: widget.session,
-              sync: _sync,
-              onRequireLogin: () => setState(() => _showLogin = true),
-            ),
+      home: home,
     );
   }
 }
