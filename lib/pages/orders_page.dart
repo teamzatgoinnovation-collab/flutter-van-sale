@@ -78,15 +78,10 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Future<CustomerModel?> _pickCustomer({String? initialQuery}) async {
-    final session = _session;
-    if (session == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Session unavailable')),
-      );
-      return null;
-    }
-    return Navigator.of(context).push<CustomerModel>(
+    final session = _session ?? widget.sync.session;
+    return Navigator.of(context, rootNavigator: true).push<CustomerModel>(
       MaterialPageRoute(
+        fullscreenDialog: true,
         builder: (_) => CustomerSearchPage(
           session: session,
           sync: widget.sync,
@@ -98,16 +93,12 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Future<String?> _createCustomerDialog() async {
-    final session = _session;
-    if (session == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Session unavailable')),
-      );
-      return null;
-    }
+    final session = _session ?? widget.sync.session;
     // Offline-first form — works without connectivity.
-    final created = await Navigator.of(context).push<CustomerModel>(
+    final created = await Navigator.of(context, rootNavigator: true)
+        .push<CustomerModel>(
       MaterialPageRoute(
+        fullscreenDialog: true,
         builder: (_) =>
             CustomerFormPage(session: session, sync: widget.sync),
       ),
@@ -117,15 +108,11 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Future<StockLine?> _pickProduct() async {
-    final session = _session;
-    if (session == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Session unavailable')),
-      );
-      return null;
-    }
-    final picked = await Navigator.of(context).push<ProductModel>(
+    final session = _session ?? widget.sync.session;
+    final picked = await Navigator.of(context, rootNavigator: true)
+        .push<ProductModel>(
       MaterialPageRoute(
+        fullscreenDialog: true,
         builder: (_) => ProductSearchPage(
           session: session,
           sync: widget.sync,
@@ -148,15 +135,11 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Future<StockLine?> _createProductDialog() async {
-    final session = _session;
-    if (session == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Session unavailable')),
-      );
-      return null;
-    }
-    final created = await Navigator.of(context).push<ProductModel>(
+    final session = _session ?? widget.sync.session;
+    final created = await Navigator.of(context, rootNavigator: true)
+        .push<ProductModel>(
       MaterialPageRoute(
+        fullscreenDialog: true,
         builder: (_) =>
             ProductFormPage(session: session, sync: widget.sync),
       ),
@@ -433,10 +416,16 @@ class _OrdersPageState extends State<OrdersPage> {
       title: 'Sell',
       subtitle: 'Sales Invoice · create customer / product',
       onOpenMenu: widget.onOpenMenu,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _saving ? null : () => _newOrder(),
-        icon: const Icon(Icons.add),
-        label: Text(_saving ? 'Saving…' : 'Sell'),
+      // IndexedStack keeps Sell+Cash FABs mounted; disable heroes so route
+      // pushes from the Sell dialog cannot collide.
+      floatingActionButton: HeroMode(
+        enabled: false,
+        child: FloatingActionButton.extended(
+          heroTag: 'van_sale_sell_fab',
+          onPressed: _saving ? null : () => _newOrder(),
+          icon: const Icon(Icons.add),
+          label: Text(_saving ? 'Saving…' : 'Sell'),
+        ),
       ),
       child: Column(
         children: [

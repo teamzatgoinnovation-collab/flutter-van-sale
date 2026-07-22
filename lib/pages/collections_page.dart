@@ -109,26 +109,28 @@ class _CollectionsPageState extends State<CollectionsPage> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: FilledButton.tonalIcon(
-                  onPressed: session == null
-                      ? null
-                      : () async {
-                          final picked =
-                              await Navigator.of(context).push<CustomerModel>(
-                            MaterialPageRoute(
-                              builder: (_) => CustomerSearchPage(
-                                session: session,
-                                sync: widget.sync,
-                                selectMode: true,
-                                initialQuery: customer,
-                              ),
-                            ),
-                          );
-                          if (picked == null) return;
-                          setLocal(() {
-                            selected = picked;
-                            customer = picked.displayName;
-                          });
-                        },
+                  onPressed: () async {
+                    final sess = session ?? widget.sync.session;
+                    final picked = await Navigator.of(
+                      context,
+                      rootNavigator: true,
+                    ).push<CustomerModel>(
+                      MaterialPageRoute(
+                        fullscreenDialog: true,
+                        builder: (_) => CustomerSearchPage(
+                          session: sess,
+                          sync: widget.sync,
+                          selectMode: true,
+                          initialQuery: customer,
+                        ),
+                      ),
+                    );
+                    if (picked == null) return;
+                    setLocal(() {
+                      selected = picked;
+                      customer = picked.displayName;
+                    });
+                  },
                   icon: const Icon(Icons.search, size: 18),
                   label: const Text('Search customer'),
                 ),
@@ -223,10 +225,16 @@ class _CollectionsPageState extends State<CollectionsPage> {
       title: 'Cash',
       subtitle: 'Payment Entry · safe client_id sync',
       onOpenMenu: widget.onOpenMenu,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _saving ? null : () => _collect(),
-        icon: const Icon(Icons.payments_outlined),
-        label: Text(_saving ? 'Saving…' : 'Collect'),
+      // IndexedStack keeps Sell+Cash FABs mounted; disable heroes so route
+      // pushes from dialogs cannot collide.
+      floatingActionButton: HeroMode(
+        enabled: false,
+        child: FloatingActionButton.extended(
+          heroTag: 'van_sale_cash_fab',
+          onPressed: _saving ? null : () => _collect(),
+          icon: const Icon(Icons.payments_outlined),
+          label: Text(_saving ? 'Saving…' : 'Collect'),
+        ),
       ),
       child: Column(
         children: [
