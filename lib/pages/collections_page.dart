@@ -7,6 +7,7 @@ import '../data/van_sale_repo.dart';
 import '../models/models.dart';
 import '../services/auth_scope.dart';
 import '../services/sync_service.dart';
+import '../services/van_sale_policy.dart';
 import '../widgets/widgets.dart';
 
 class CollectionsPage extends StatefulWidget {
@@ -195,8 +196,11 @@ class _CollectionsPageState extends State<CollectionsPage> {
         amount: double.tryParse(amount.text) ?? 0,
         method: method,
         salesInvoice: salesInvoice,
+        session: widget.sync.session,
       );
-      await widget.sync.flush(pullTrips: false);
+      if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
+        await widget.sync.flush(pullTrips: false);
+      }
       await _load();
     } catch (e) {
       if (mounted) {

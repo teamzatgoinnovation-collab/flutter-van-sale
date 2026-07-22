@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/van_sale_repo.dart';
 import '../models/models.dart';
 import '../services/sync_service.dart';
+import '../services/van_sale_policy.dart';
 import '../widgets/widgets.dart';
 
 class StockPage extends StatefulWidget {
@@ -67,8 +68,11 @@ class _StockPageState extends State<StockPage> {
       await vanSaleRepo.adjustStock(
         itemCode: line.itemCode,
         delta: load ? n : -n,
+        session: widget.sync.session,
       );
-      await widget.sync.flush(pullTrips: false);
+      if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
+        await widget.sync.flush(pullTrips: false);
+      }
       await _load();
     } catch (e) {
       if (mounted) {

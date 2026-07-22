@@ -13,6 +13,7 @@ import '../product/repositories/product_repository.dart';
 import '../services/auth_scope.dart';
 import '../services/session.dart';
 import '../services/sync_service.dart';
+import '../services/van_sale_policy.dart';
 import '../widgets/widgets.dart';
 
 class OrdersPage extends StatefulWidget {
@@ -398,12 +399,21 @@ class _OrdersPageState extends State<OrdersPage> {
       await vanSaleRepo.createOrder(
         customerName: customer.trim(),
         lines: lines,
+        session: widget.sync.session,
       );
-      await widget.sync.flush(pullTrips: false);
+      if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
+        await widget.sync.flush(pullTrips: false);
+      }
       await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sale saved · sync queued')),
+          SnackBar(
+            content: Text(
+              VanSalePolicy.instance.shouldAttemptFlushAfterWrite
+                  ? 'Sale saved · sync queued'
+                  : 'Sale saved locally',
+            ),
+          ),
         );
       }
     } catch (e) {

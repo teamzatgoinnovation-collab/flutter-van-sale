@@ -83,6 +83,7 @@ class ProductModel {
 
   final SyncStatus syncStatus;
   final String? erpName;
+
   /// Last known ERPNext `modified` — used for conflict detection.
   final String? erpModified;
   final String? lastError;
@@ -90,8 +91,10 @@ class ProductModel {
   final DateTime updatedAt;
 
   final bool isFavorite;
+
   /// Joined from van_stock when searching (0 if missing).
   final double stockQty;
+
   /// Van stock unit price when joined; falls back to [sellingRate].
   final double? stockUnitPrice;
 
@@ -104,7 +107,23 @@ class ProductModel {
 
   bool get lowStock {
     if (reorderLevel != null) return stockQty <= reorderLevel!;
-    return stockQty > 0 && stockQty <= 5;
+    // Threshold from VanSalePrefs (default 5); keep getter sync-safe.
+    return stockQty > 0 && stockQty <= _defaultLowStockThreshold;
+  }
+
+  /// Used when [reorderLevel] is null; Settings can override via prefs at call sites.
+  static double _defaultLowStockThreshold = 5;
+
+  /// Apply Settings low-stock threshold (call after prefs load / save).
+  static void setDefaultLowStockThreshold(double value) {
+    _defaultLowStockThreshold =
+        value.isFinite && value >= 0 ? value : 5;
+  }
+
+  bool isLowStock({double? threshold}) {
+    if (reorderLevel != null) return stockQty <= reorderLevel!;
+    final t = threshold ?? _defaultLowStockThreshold;
+    return stockQty > 0 && stockQty <= t;
   }
 
   String get subtitle {
@@ -214,17 +233,20 @@ class ProductDefaults {
   final List<String> costCenters;
 
   factory ProductDefaults.fallback() => const ProductDefaults(
-        itemGroup: 'Products',
-        stockUom: 'Nos',
-        salesUom: 'Nos',
-        company: '',
-      );
+    itemGroup: 'Products',
+    stockUom: 'Nos',
+    salesUom: 'Nos',
+    company: '',
+  );
 
   factory ProductDefaults.fromJson(Map<String, dynamic> json) {
     List<String> list(String key) {
       final raw = json[key];
       if (raw is! List) return const [];
-      return raw.map((e) => '$e').where((e) => e.isNotEmpty).toList(growable: false);
+      return raw
+          .map((e) => '$e')
+          .where((e) => e.isNotEmpty)
+          .toList(growable: false);
     }
 
     return ProductDefaults(

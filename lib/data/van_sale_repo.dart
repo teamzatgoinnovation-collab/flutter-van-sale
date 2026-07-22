@@ -8,6 +8,7 @@ import '../product/validation/product_validators.dart';
 import '../models/models.dart';
 import '../services/prefs.dart';
 import '../services/session.dart';
+import '../services/van_sale_policy.dart';
 import 'van_sale_db.dart';
 
 /// Local-first VanSale repository backed by ERPNext via go_van APIs.
@@ -113,15 +114,18 @@ class VanSaleRepo {
   Future<VanOrder> createOrder({
     required String customerName,
     required List<OrderLine> lines,
+    VanSaleSession? session,
   }) async {
     if (lines.isEmpty) {
       throw StateError('Order needs at least one stock line.');
     }
+    await VanSalePolicy.instance.assertCanMutate(session);
     final amount = lines.fold<double>(0, (s, l) => s + l.amount);
     final clientId = newClientId();
     final id = newLocalId('ord');
     final warehouse = VanSalePrefs.instance.warehouse.trim();
     final company = VanSalePrefs.instance.company.trim();
+    final allowNegative = VanSalePolicy.instance.allowNegativeStock;
     final order = VanOrder(
       id: id,
       clientId: clientId,
@@ -139,7 +143,7 @@ class VanSaleRepo {
         if (stock == null) {
           throw StateError('Unknown item ${line.itemCode}');
         }
-        if (stock.qty < line.qty) {
+        if (!allowNegative && stock.qty < line.qty) {
           throw StateError(
             'Insufficient stock for ${stock.itemName} '
             '(have ${stock.qty}, need ${line.qty})',
@@ -179,8 +183,10 @@ class VanSaleRepo {
     required double amount,
     required String method,
     String? salesInvoice,
+    VanSaleSession? session,
   }) async {
     if (amount <= 0) throw StateError('Collection amount must be positive.');
+    await VanSalePolicy.instance.assertCanMutate(session);
     final clientId = newClientId();
     final id = newLocalId('col');
     final row = Collection(
@@ -254,18 +260,21 @@ class VanSaleRepo {
   Future<void> adjustStock({
     required String itemCode,
     required double delta,
+    VanSaleSession? session,
   }) async {
+    await VanSalePolicy.instance.assertCanMutate(session);
     final warehouse = VanSalePrefs.instance.warehouse.trim();
     if (warehouse.isEmpty) {
       throw StateError('Set van warehouse in Settings before adjusting stock.');
     }
     final company = VanSalePrefs.instance.company.trim();
+    final allowNegative = VanSalePolicy.instance.allowNegativeStock;
     final database = await db.database;
     await database.transaction((txn) async {
       final stock = await db.getStock(itemCode, executor: txn);
       if (stock == null) throw StateError('Unknown item $itemCode');
       final next = stock.qty + delta;
-      if (next < 0) {
+      if (!allowNegative && next < 0) {
         throw StateError('Stock cannot go negative for ${stock.itemName}');
       }
       await db.setStockQty(itemCode, next, executor: txn);

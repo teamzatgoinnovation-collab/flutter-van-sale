@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../data/van_sale_db.dart';
 import '../models/models.dart';
+import '../services/prefs.dart';
 import '../services/sync_service.dart';
+import '../services/van_sale_policy.dart';
 
 /// Manual sync, retry queue, conflict resolution, and sync logs.
 class SyncCenterPage extends StatefulWidget {
@@ -61,6 +63,17 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
   }
 
   Future<void> _manualSync() async {
+    if (!VanSalePolicy.instance.syncAllowed) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Offline mode — sync disabled. Change work mode in Settings.',
+          ),
+        ),
+      );
+      return;
+    }
     final result = await widget.sync.flush(mode: SyncMode.manual);
     await _reload();
     if (!mounted) return;
@@ -75,15 +88,33 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
   }
 
   Future<void> _retryAll() async {
+    if (!VanSalePolicy.instance.syncAllowed) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Offline mode — sync disabled. Change work mode in Settings.',
+          ),
+        ),
+      );
+      return;
+    }
     await widget.sync.retryFailed();
     await widget.sync.flush(pullTrips: false, mode: SyncMode.manual);
     await _reload();
   }
 
+  String get _modeLabel => switch (VanSalePrefs.instance.workMode) {
+        VanSaleWorkMode.online => 'Online',
+        VanSaleWorkMode.offline => 'Offline',
+        VanSaleWorkMode.onlineOffline => 'Online+Offline',
+      };
+
   @override
   Widget build(BuildContext context) {
     final sync = widget.sync;
     final theme = Theme.of(context);
+    final offlineMode = !VanSalePolicy.instance.syncAllowed;
 
     return Scaffold(
       appBar: AppBar(
@@ -112,6 +143,25 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
               children: [
+                Card(
+                  color: offlineMode
+                      ? theme.colorScheme.errorContainer
+                      : theme.colorScheme.surfaceContainerHighest,
+                  child: ListTile(
+                    leading: Icon(
+                      offlineMode
+                          ? Icons.cloud_off_outlined
+                          : Icons.cloud_outlined,
+                    ),
+                    title: Text('Work mode: $_modeLabel'),
+                    subtitle: Text(
+                      offlineMode
+                          ? 'Offline mode — sync disabled'
+                          : 'Sync allowed when signed in',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 if (sync.isRunning) ...[
                   Text(
                     sync.progressLabel.isEmpty
@@ -155,16 +205,18 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Background sync'),
-                  subtitle: const Text('Every ~45s while online'),
-                  value: sync.backgroundEnabled,
-                  onChanged: (v) {
-                    setState(() => sync.backgroundEnabled = v);
-                    if (v) {
-                      sync.startBackgroundSync();
-                    } else {
-                      sync.stopBackgroundSync();
-                    }
-                  },
+                  subtitle: Text(
+                    offlineMode
+                        ? 'Blocked by Offline work mode'
+                        : 'Every ~45s while online',
+                  ),
+                  value: sync.backgroundEnabled && !offlineMode,
+                  onChanged: offlineMode
+                      ? null
+                      : (v) async {
+                          await sync.setBackgroundEnabled(v);
+                          if (mounted) setState(() {});
+                        },
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -185,6 +237,17 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
                   ..._queue.map((item) => _QueueTile(
                         item: item,
                         onRetry: () async {
+                          if (!VanSalePolicy.instance.syncAllowed) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Offline mode — sync disabled. Change work mode in Settings.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
                           await widget.sync.retryFailed(item.id);
                           await widget.sync.flush(
                             pullTrips: false,
@@ -193,6 +256,17 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
                           await _reload();
                         },
                         onKeepLocal: () async {
+                          if (!VanSalePolicy.instance.syncAllowed) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Offline mode — sync disabled. Change work mode in Settings.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
                           await widget.sync.resolveConflictKeepLocal(item.id);
                           await widget.sync.flush(
                             pullTrips: false,
@@ -201,6 +275,17 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
                           await _reload();
                         },
                         onTakeServer: () async {
+                          if (!VanSalePolicy.instance.syncAllowed) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Offline mode — sync disabled. Change work mode in Settings.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
                           await widget.sync.resolveConflictTakeServer(item.id);
                           await _reload();
                         },

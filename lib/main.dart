@@ -7,15 +7,20 @@ import 'data/van_sale_repo.dart';
 import 'core/di/van_sale_services.dart';
 import 'pages/login_page.dart';
 import 'pages/shell.dart';
+import 'product/models/product_model.dart';
 import 'services/prefs.dart';
 import 'services/session.dart';
 import 'services/sync_service.dart';
+import 'services/van_sale_policy.dart';
 import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initVanSaleSqflite();
   await VanSalePrefs.instance.init();
+  ProductModel.setDefaultLowStockThreshold(
+    VanSalePrefs.instance.lowStockThreshold,
+  );
   await vanSaleRepo.init();
   await VanSaleServices.bootstrap();
   final session = VanSaleSession();
@@ -90,7 +95,12 @@ class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
   }
 
   Future<void> _afterAuth() async {
-    _sync.startBackgroundSync();
+    _sync.applyPrefs();
+    if (VanSalePolicy.instance.backgroundSyncDesired) {
+      _sync.startBackgroundSync();
+    } else {
+      _sync.stopBackgroundSync();
+    }
     try {
       await _sync.flush(mode: SyncMode.manual);
     } catch (e) {

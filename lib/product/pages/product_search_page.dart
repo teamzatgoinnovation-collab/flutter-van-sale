@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/search/search_list_controller.dart';
 import '../../services/session.dart';
 import '../../services/sync_service.dart';
+import '../../services/van_sale_policy.dart';
 import '../../widgets/widgets.dart';
 import '../models/product_model.dart';
 import '../repositories/product_repository.dart';
@@ -42,18 +43,15 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
       _query.text = widget.initialQuery!;
       _controller.query = widget.initialQuery!;
     }
-    _controller.runSearch = ({
-      required String query,
-      required int limit,
-      required int offset,
-    }) {
-      return productRepository.search(
-        query: query,
-        limit: limit,
-        offset: offset,
-        scope: _scope,
-      );
-    };
+    _controller.runSearch =
+        ({required String query, required int limit, required int offset}) {
+          return productRepository.search(
+            query: query,
+            limit: limit,
+            offset: offset,
+            scope: _scope,
+          );
+        };
     _controller.addListener(_onController);
     _scroll.addListener(_onScroll);
     _controller.reload(reset: true);
@@ -87,9 +85,7 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Scan or type barcode',
-          ),
+          decoration: const InputDecoration(hintText: 'Scan or type barcode'),
           onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
         ),
         actions: [
@@ -145,8 +141,7 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
     if (sync == null) return;
     final created = await Navigator.of(context).push<ProductModel>(
       MaterialPageRoute(
-        builder: (_) =>
-            ProductFormPage(session: widget.session, sync: sync),
+        builder: (_) => ProductFormPage(session: widget.session, sync: sync),
       ),
     );
     if (created == null || !mounted) return;
@@ -256,101 +251,99 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
               child: c.loading && !c.refreshing
                   ? const Center(child: CircularProgressIndicator())
                   : c.items.isEmpty
-                      ? ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          children: [
-                            const SizedBox(height: 80),
-                            Icon(
-                              Icons.search_off,
-                              size: 48,
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        const SizedBox(height: 80),
+                        Icon(
+                          Icons.search_off,
+                          size: 48,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(height: 12),
+                        Center(
+                          child: Text(
+                            _scope == ProductSearchScope.favorites
+                                ? 'No favorites yet'
+                                : _scope == ProductSearchScope.recent
+                                ? 'No recent products'
+                                : _scope == ProductSearchScope.frequent
+                                ? 'No sales history yet'
+                                : 'No products match',
+                            style: theme.textTheme.titleMedium,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: Text(
+                            'Pull to refresh · works offline',
+                            style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
-                            const SizedBox(height: 12),
-                            Center(
-                              child: Text(
-                                _scope == ProductSearchScope.favorites
-                                    ? 'No favorites yet'
-                                    : _scope == ProductSearchScope.recent
-                                        ? 'No recent products'
-                                        : _scope == ProductSearchScope.frequent
-                                            ? 'No sales history yet'
-                                            : 'No products match',
-                                style: theme.textTheme.titleMedium,
-                              ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : ListView.builder(
+                      controller: _scroll,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: c.items.length + (c.hasMore ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index >= c.items.length) {
+                          return Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Center(
+                              child: c.loadingMore
+                                  ? const CircularProgressIndicator()
+                                  : TextButton(
+                                      onPressed: _controller.loadMore,
+                                      child: const Text('Load more'),
+                                    ),
                             ),
-                            const SizedBox(height: 8),
-                            Center(
-                              child: Text(
-                                'Pull to refresh · works offline',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
+                          );
+                        }
+                        final p = c.items[index];
+                        return ListTile(
+                          leading: ProductThumb(path: p.imagePath),
+                          title: Text(p.itemName),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if ((p.itemNameAr ?? '').isNotEmpty)
+                                Text(p.itemNameAr!),
+                              Text(
+                                p.subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                          ],
-                        )
-                      : ListView.builder(
-                          controller: _scroll,
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          itemCount: c.items.length + (c.hasMore ? 1 : 0),
-                          itemBuilder: (context, index) {
-                            if (index >= c.items.length) {
-                              return Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Center(
-                                  child: c.loadingMore
-                                      ? const CircularProgressIndicator()
-                                      : TextButton(
-                                          onPressed: _controller.loadMore,
-                                          child: const Text('Load more'),
-                                        ),
-                                ),
-                              );
-                            }
-                            final p = c.items[index];
-                            return ListTile(
-                              leading: ProductThumb(path: p.imagePath),
-                              title: Text(p.itemName),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              const SizedBox(height: 4),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
                                 children: [
-                                  if ((p.itemNameAr ?? '').isNotEmpty)
-                                    Text(p.itemNameAr!),
-                                  Text(
-                                    p.subtitle,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 4,
-                                    children: [
-                                      _StockChip(product: p),
-                                      _PriceChip(product: p),
-                                    ],
-                                  ),
+                                  _StockChip(product: p),
+                                  _PriceChip(product: p),
                                 ],
                               ),
-                              isThreeLine: true,
-                              trailing: IconButton(
-                                tooltip: p.isFavorite
-                                    ? 'Unfavorite'
-                                    : 'Favorite',
-                                onPressed: () => _toggleFavorite(p),
-                                icon: Icon(
-                                  p.isFavorite
-                                      ? Icons.star_rounded
-                                      : Icons.star_outline_rounded,
-                                  color: p.isFavorite
-                                      ? theme.colorScheme.primary
-                                      : null,
-                                ),
-                              ),
-                              onTap: () => _select(p),
-                            );
-                          },
-                        ),
+                            ],
+                          ),
+                          isThreeLine: true,
+                          trailing: IconButton(
+                            tooltip: p.isFavorite ? 'Unfavorite' : 'Favorite',
+                            onPressed: () => _toggleFavorite(p),
+                            icon: Icon(
+                              p.isFavorite
+                                  ? Icons.star_rounded
+                                  : Icons.star_outline_rounded,
+                              color: p.isFavorite
+                                  ? theme.colorScheme.primary
+                                  : null,
+                            ),
+                          ),
+                          onTap: () => _select(p),
+                        );
+                      },
+                    ),
             ),
           ),
         ],
@@ -374,7 +367,9 @@ class _StockChip extends StatelessWidget {
       bg = scheme.errorContainer;
       fg = scheme.onErrorContainer;
       label = 'Out of stock';
-    } else if (product.lowStock) {
+    } else if (product.isLowStock(
+      threshold: VanSalePolicy.instance.lowStockThreshold,
+    )) {
       bg = scheme.tertiaryContainer;
       fg = scheme.onTertiaryContainer;
       label = 'Low ${money(product.stockQty)} ${product.stockUom}';

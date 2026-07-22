@@ -8,7 +8,9 @@ import '../data/van_sale_db.dart';
 import '../data/van_sale_repo.dart';
 import '../models/models.dart';
 import '../product/repositories/product_repository.dart';
+import 'prefs.dart';
 import 'session.dart';
+import 'van_sale_policy.dart';
 
 /// Production sync engine: pending → uploading → uploaded | conflict | failed → retry.
 class SyncService extends ChangeNotifier {
@@ -21,7 +23,9 @@ class SyncService extends ChangeNotifier {
   }) : db = db ?? VanSaleDb.instance,
        repo = repo ?? vanSaleRepo,
        customers = customers ?? customerRepository,
-       products = products ?? productRepository;
+       products = products ?? productRepository {
+    applyPrefs();
+  }
 
   final VanSaleSession session;
   final VanSaleDb db;
@@ -42,11 +46,29 @@ class SyncService extends ChangeNotifier {
   Timer? _bgTimer;
   bool backgroundEnabled = true;
 
+  /// Load persisted background sync + respect Offline work mode.
+  void applyPrefs() {
+    backgroundEnabled = VanSalePolicy.instance.backgroundSyncDesired;
+  }
+
+  Future<void> setBackgroundEnabled(bool value) async {
+    await VanSalePrefs.instance.setBackgroundSync(value);
+    backgroundEnabled = VanSalePolicy.instance.backgroundSyncDesired;
+    notifyListeners();
+    if (backgroundEnabled && session.connected) {
+      startBackgroundSync();
+    } else {
+      stopBackgroundSync();
+    }
+  }
+
   void startBackgroundSync() {
     _bgTimer?.cancel();
+    applyPrefs();
     if (!backgroundEnabled) return;
+    if (!VanSalePolicy.instance.syncAllowed) return;
     _bgTimer = Timer.periodic(_backgroundInterval, (_) {
-      if (!_running && session.connected) {
+      if (!_running && session.connected && VanSalePolicy.instance.syncAllowed) {
         unawaited(flush(pullTrips: true, mode: SyncMode.background));
       }
     });
@@ -69,6 +91,13 @@ class SyncService extends ChangeNotifier {
     bool useBatch = true,
     int continueOnFailure = 1,
   }) async {
+    if (!VanSalePolicy.instance.syncAllowed) {
+      await db.addSyncLog(
+        level: 'info',
+        message: 'Sync skipped (Offline work mode)',
+      );
+      return const SyncFlushResult();
+    }
     if (!session.connected) {
       return const SyncFlushResult();
     }
