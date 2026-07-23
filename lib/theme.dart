@@ -2,6 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// Field-sales palette: deep teal road / warm sand accents.
+/// Themes are cached — GoogleFonts must not rebuild on every [MaterialApp] build.
+ThemeData? _lightTheme;
+ThemeData? _darkTheme;
+
+ThemeData vanSaleLightTheme() =>
+    _lightTheme ??= buildVanSaleTheme(brightness: Brightness.light);
+
+ThemeData vanSaleDarkTheme() =>
+    _darkTheme ??= buildVanSaleTheme(brightness: Brightness.dark);
+
+/// Warm the Plus Jakarta Sans cache before first paint (avoids main-thread jank).
+Future<void> preloadVanSaleFonts() async {
+  try {
+    await GoogleFonts.pendingFonts([
+      GoogleFonts.plusJakartaSans(),
+      GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500),
+      GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+    ]);
+  } catch (_) {
+    // Offline / fetch failure — ThemeData falls back to platform fonts.
+  }
+}
+
 ThemeData buildVanSaleTheme({Brightness brightness = Brightness.light}) {
   const seed = Color(0xFF0F4C5C);
   final isDark = brightness == Brightness.dark;

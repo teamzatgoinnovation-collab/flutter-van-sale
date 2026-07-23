@@ -17,16 +17,96 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initVanSaleSqflite();
-  await VanSalePrefs.instance.init();
-  ProductModel.setDefaultLowStockThreshold(
-    VanSalePrefs.instance.lowStockThreshold,
-  );
-  await vanSaleRepo.init();
-  await VanSaleServices.bootstrap();
-  final session = VanSaleSession();
-  session.updateBaseUrl(VanSalePrefs.instance.siteUrl);
-  runApp(VanSaleApp(session: session));
+  // Paint a splash immediately; heavy SQLite / prefs / fonts run after first frame.
+  runApp(const _VanSaleBootstrap());
+}
+
+class _VanSaleBootstrap extends StatefulWidget {
+  const _VanSaleBootstrap();
+
+  @override
+  State<_VanSaleBootstrap> createState() => _VanSaleBootstrapState();
+}
+
+class _VanSaleBootstrapState extends State<_VanSaleBootstrap> {
+  Object? _error;
+  VanSaleSession? _session;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_boot());
+  }
+
+  Future<void> _boot() async {
+    try {
+      await initVanSaleSqflite();
+      await VanSalePrefs.instance.init();
+      ProductModel.setDefaultLowStockThreshold(
+        VanSalePrefs.instance.lowStockThreshold,
+      );
+      // Fonts + DB in parallel after prefs (prefs is tiny / needed first).
+      await Future.wait([
+        preloadVanSaleFonts(),
+        vanSaleRepo.init(),
+        VanSaleServices.bootstrap(),
+      ]);
+      final session = VanSaleSession();
+      session.updateBaseUrl(VanSalePrefs.instance.siteUrl);
+      if (!mounted) return;
+      setState(() => _session = session);
+    } catch (e, st) {
+      debugPrint('VanSale bootstrap failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _error = e);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = _session;
+    if (session != null) {
+      return VanSaleApp(session: session);
+    }
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      // Plain Material theme — avoid GoogleFonts until preload finishes.
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0F4C5C)),
+      ),
+      home: Scaffold(
+        body: Center(
+          child: _error == null
+              ? const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Starting VanSale…'),
+                  ],
+                )
+              : Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Startup failed: $_error', textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: () {
+                          setState(() => _error = null);
+                          unawaited(_boot());
+                        },
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
 }
 
 class VanSaleApp extends StatefulWidget {
@@ -174,8 +254,8 @@ class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
     return MaterialApp(
       title: 'VanSale',
       debugShowCheckedModeBanner: false,
-      theme: buildVanSaleTheme(brightness: Brightness.light),
-      darkTheme: buildVanSaleTheme(brightness: Brightness.dark),
+      theme: vanSaleLightTheme(),
+      darkTheme: vanSaleDarkTheme(),
       themeMode: ThemeMode.system,
       home: home,
     );
