@@ -328,4 +328,34 @@ class VanSaleInvoiceService {
       messenger.showSnackBar(SnackBar(content: Text('Invoice: $e')));
     }
   }
+
+  /// Right after a synced sale — open the tax invoice print UI immediately.
+  static Future<void> openAfterSale(
+    BuildContext context, {
+    required VanSaleSession session,
+    required String erpName,
+  }) async {
+    final name = erpName.trim();
+    if (name.isEmpty || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await VanSaleInvoiceService(session).openPdf(name);
+      if (context.mounted) messenger.hideCurrentSnackBar();
+    } catch (e) {
+      if (!context.mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Invoice $name — tap to open'),
+          action: SnackBarAction(
+            label: 'Open',
+            onPressed: () {
+              showActions(context, session: session, erpName: name);
+            },
+          ),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    }
+  }
 }

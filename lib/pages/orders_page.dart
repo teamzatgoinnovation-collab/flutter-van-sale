@@ -120,20 +120,14 @@ class _OrdersPageState extends State<OrdersPage> {
         if (erpName != null &&
             erpName.isNotEmpty &&
             order?.syncStatus == SyncStatus.uploaded) {
+          // Field sale: open tax invoice immediately so the salesman can print.
           messenger.showSnackBar(
-            SnackBar(
-              content: Text('Invoiced · $erpName'),
-              action: SnackBarAction(
-                label: 'Invoice',
-                onPressed: () {
-                  VanSaleInvoiceService.showActions(
-                    context,
-                    session: _session,
-                    erpName: erpName,
-                  );
-                },
-              ),
-            ),
+            SnackBar(content: Text('Invoiced · $erpName · opening…')),
+          );
+          await VanSaleInvoiceService.openAfterSale(
+            context,
+            session: _session,
+            erpName: erpName,
           );
         } else {
           final pending = order?.syncStatus == SyncStatus.failed ||
