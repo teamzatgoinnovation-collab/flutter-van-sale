@@ -103,30 +103,122 @@ class _AdminRoutesPageState extends State<AdminRoutesPage> {
                 ? const EmptyHint('No stops match filters')
                 : RefreshIndicator(
                     onRefresh: _load,
-                    child: ListView.separated(
+                    child: ListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-                      itemCount: _rows.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, i) {
-                        final r = _rows[i];
-                        return Card(
-                          child: ListTile(
-                            title: Text(
-                              '${r['customer'] ?? r['title'] ?? 'Stop'}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: KpiCard(
+                                title: 'Total Stops',
+                                value: '${_rows.length}',
+                                icon: Icons.map_outlined,
+                                accentColor: const Color(0xFF0F4C5C),
                               ),
                             ),
-                            subtitle: Text(
-                              '${r['address'] ?? ''}\n'
-                              '${r['sales_user'] ?? ''} · ${r['route_title'] ?? ''} · '
-                              '${r['status'] ?? ''}',
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: KpiCard(
+                                title: 'Visited',
+                                value: '${_rows.where((r) => '${r['status']}'.toLowerCase() == 'completed' || '${r['status']}'.toLowerCase() == 'checked in').length}',
+                                icon: Icons.check_circle_outline,
+                                accentColor: const Color(0xFF2A9D8F),
+                              ),
                             ),
-                            isThreeLine: true,
-                            trailing: Text('#${r['sequence'] ?? ''}'),
-                          ),
-                        );
-                      },
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        ..._rows.map((r) {
+                          final status = '${r['status'] ?? 'planned'}'.toLowerCase();
+                          final (statusLabel, statusColor) = switch (status) {
+                            'checked in' => ('Checked in', const Color(0xFFE36414)),
+                            'completed' => ('Completed', const Color(0xFF0F4C5C)),
+                            'skipped' => ('Skipped', Colors.brown),
+                            _ => ('Planned', Colors.blueGrey),
+                          };
+
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 14,
+                                        backgroundColor: statusColor.withValues(alpha: 0.15),
+                                        child: Text(
+                                          '${r['sequence'] ?? '#'}',
+                                          style: TextStyle(
+                                            color: statusColor,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          '${r['customer'] ?? r['title'] ?? 'Stop'}',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: statusColor.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: statusColor.withValues(alpha: 0.4),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          statusLabel,
+                                          style: TextStyle(
+                                            color: statusColor,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '${r['address'] ?? 'No address'}',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.person_outline,
+                                        size: 14,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${r['sales_user'] ?? '—'} · ${r['route_title'] ?? '—'}',
+                                        style: Theme.of(context).textTheme.labelSmall,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
                     ),
                   ),
           ),

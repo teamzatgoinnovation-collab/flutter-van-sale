@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.zatgo.van_sale"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

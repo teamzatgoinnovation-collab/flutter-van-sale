@@ -81,8 +81,7 @@ class VanSaleRepo {
       await db.metaSet('route_name', 'Van route');
       routeName = 'Van route';
 
-      final profileWh =
-          session.context?.profile?.warehouse.trim() ?? '';
+      final profileWh = session.context?.profile?.warehouse.trim() ?? '';
       if (profileWh.isNotEmpty &&
           VanSalePrefs.instance.warehouse.trim().isEmpty) {
         await VanSalePrefs.instance.setWarehouse(profileWh);
@@ -123,6 +122,7 @@ class VanSaleRepo {
     required String customerName,
     required List<OrderLine> lines,
     VanSaleSession? session,
+    String? tripId,
   }) async {
     if (lines.isEmpty) {
       throw StateError('Order needs at least one stock line.');
@@ -134,6 +134,7 @@ class VanSaleRepo {
     final warehouse = VanSalePrefs.instance.warehouse.trim();
     final company = VanSalePrefs.instance.company.trim();
     final allowNegative = VanSalePolicy.instance.allowNegativeStock;
+    final trip = tripId?.trim() ?? '';
     final order = VanOrder(
       id: id,
       clientId: clientId,
@@ -178,6 +179,7 @@ class VanSaleRepo {
           ],
           if (warehouse.isNotEmpty) 'warehouse': warehouse,
           if (company.isNotEmpty) 'company': company,
+          if (trip.isNotEmpty) 'trip_id': trip,
         },
         executor: txn,
       );
@@ -230,7 +232,14 @@ class VanSaleRepo {
     return row;
   }
 
-  Future<RouteStop?> updateVisit(String id, VisitStatus status) async {
+  Future<RouteStop?> updateVisit(
+    String id,
+    VisitStatus status, {
+    double? lat,
+    double? lng,
+    String? notes,
+    String? noSaleReason,
+  }) async {
     final stops = await db.listStops();
     final current = stops.where((s) => s.id == id).firstOrNull;
     if (current == null) return null;
@@ -257,6 +266,11 @@ class VanSaleRepo {
           'client_id': clientId,
           'stop_id': id,
           'visit_status': status.name,
+          'lat': ?lat,
+          'lng': ?lng,
+          if (notes != null && notes.isNotEmpty) 'notes': notes,
+          if (noSaleReason != null && noSaleReason.isNotEmpty)
+            'no_sale_reason': noSaleReason,
         },
         executor: txn,
         conflict: ConflictAlgorithm.replace,
@@ -298,6 +312,66 @@ class VanSaleRepo {
           'item_code': itemCode,
           'delta': delta,
           'warehouse': warehouse,
+          if (company.isNotEmpty) 'company': company,
+        },
+        executor: txn,
+      );
+    });
+  }
+
+  /// Material Transfer from depot / source WH into the van warehouse (or reverse).
+  Future<void> transferStock({
+    required String itemCode,
+    required double qty,
+    required String fromWarehouse,
+    required String toWarehouse,
+    VanSaleSession? session,
+  }) async {
+    await VanSalePolicy.instance.assertCanMutate(session);
+    if (qty <= 0) throw StateError('Transfer qty must be positive');
+    final from = fromWarehouse.trim();
+    final to = toWarehouse.trim();
+    if (from.isEmpty || to.isEmpty) {
+      throw StateError('Set source and van warehouses in Settings.');
+    }
+    if (from == to) {
+      throw StateError('Source and destination warehouses must differ.');
+    }
+    final vanWh = VanSalePrefs.instance.warehouse.trim();
+    final company = VanSalePrefs.instance.company.trim();
+    final allowNegative = VanSalePolicy.instance.allowNegativeStock;
+    final database = await db.database;
+    await database.transaction((txn) async {
+      // Only adjust local van stock when transfer touches the configured van WH.
+      if (vanWh.isNotEmpty && (to == vanWh || from == vanWh)) {
+        final stock = await db.getStock(itemCode, executor: txn);
+        if (stock == null && to == vanWh) {
+          throw StateError(
+            'Unknown item $itemCode on van — sync stock first or add product.',
+          );
+        }
+        if (stock != null) {
+          final delta = to == vanWh ? qty : -qty;
+          final next = stock.qty + delta;
+          if (!allowNegative && next < 0) {
+            throw StateError('Stock cannot go negative for ${stock.itemName}');
+          }
+          await db.setStockQty(itemCode, next, executor: txn);
+        }
+      }
+      final clientId = newClientId();
+      await db.enqueue(
+        clientId: clientId,
+        entityType: 'van_stock',
+        entityId: clientId,
+        op: 'update',
+        method: ZatGoApiMethods.goVanStockTransfer,
+        args: {
+          'client_id': clientId,
+          'item_code': itemCode,
+          'qty': qty,
+          'from_warehouse': from,
+          'to_warehouse': to,
           if (company.isNotEmpty) 'company': company,
         },
         executor: txn,

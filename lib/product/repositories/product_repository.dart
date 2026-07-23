@@ -226,6 +226,9 @@ class ProductRepository {
   Future<ProductModel?> findByBarcode(String barcode) =>
       db.findProductByBarcode(barcode);
 
+  Future<ProductModel?> findByItemCode(String itemCode) =>
+      db.getProductByCode(itemCode.trim());
+
   Future<void> toggleFavorite(String productId, {required bool favorite}) =>
       db.setProductFavorite(productId, favorite);
 

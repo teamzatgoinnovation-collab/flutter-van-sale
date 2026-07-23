@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+export 'kpi_card.dart';
+export 'sync_status_badge.dart';
+
+
 import '../models/models.dart';
 import '../services/auth_scope.dart';
 

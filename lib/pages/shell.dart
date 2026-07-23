@@ -31,6 +31,7 @@ class VanSaleShell extends StatefulWidget {
 class _VanSaleShellState extends State<VanSaleShell> {
   int _index = 0;
   String? _prefillCustomer;
+  String? _prefillTripId;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
@@ -54,9 +55,10 @@ class _VanSaleShellState extends State<VanSaleShell> {
     widget.onRequireLogin?.call();
   }
 
-  void _openSell({String? customer}) {
+  void _openSell({String? customer, String? tripId}) {
     setState(() {
       _prefillCustomer = customer;
+      _prefillTripId = tripId;
       _index = 1;
     });
   }
@@ -69,8 +71,11 @@ class _VanSaleShellState extends State<VanSaleShell> {
   }
 
   void _clearPrefill() {
-    if (_prefillCustomer != null) {
-      setState(() => _prefillCustomer = null);
+    if (_prefillCustomer != null || _prefillTripId != null) {
+      setState(() {
+        _prefillCustomer = null;
+        _prefillTripId = null;
+      });
     }
   }
 
@@ -135,13 +140,15 @@ class _VanSaleShellState extends State<VanSaleShell> {
     final pages = [
       TodayPage(
         sync: widget.sync,
-        onSell: (customer) => _openSell(customer: customer),
+        onSell: (customer, {tripId}) =>
+            _openSell(customer: customer, tripId: tripId),
         onCollect: (customer) => _openCash(customer: customer),
         onOpenMenu: _openDrawer,
       ),
       OrdersPage(
         sync: widget.sync,
         initialCustomer: _index == 1 ? _prefillCustomer : null,
+        initialTripId: _index == 1 ? _prefillTripId : null,
         onConsumedPrefill: _clearPrefill,
         onOpenMenu: _openDrawer,
       ),
@@ -284,7 +291,9 @@ class _VanSaleShellState extends State<VanSaleShell> {
                   ),
                 ),
               ),
-            Expanded(child: IndexedStack(index: _index, children: pages)),
+            Expanded(
+              child: IndexedStack(index: _index, children: pages),
+            ),
           ],
         ),
         bottomNavigationBar: NavigationBar(

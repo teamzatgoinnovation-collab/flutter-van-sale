@@ -20,6 +20,7 @@ class VanSalePrefs {
 
   static const _kSiteUrl = 'van_sale.site_url';
   static const _kWarehouse = 'van_sale.warehouse';
+  static const _kSourceWarehouse = 'van_sale.source_warehouse';
   static const _kCompany = 'van_sale.company';
   static const _kWorkMode = 'van_sale.work_mode';
   static const _kAllowNegativeStock = 'van_sale.allow_negative_stock';
@@ -60,6 +61,13 @@ class VanSalePrefs {
     await prefs.setString(_kWarehouse, value.trim());
   }
 
+  /// Main / depot warehouse used as Material Transfer source into the van WH.
+  String get sourceWarehouse => prefs.getString(_kSourceWarehouse) ?? '';
+
+  Future<void> setSourceWarehouse(String value) async {
+    await prefs.setString(_kSourceWarehouse, value.trim());
+  }
+
   String get company => prefs.getString(_kCompany) ?? '';
 
   Future<void> setCompany(String value) async {
@@ -85,8 +93,7 @@ class VanSalePrefs {
     await prefs.setString(_kWorkMode, value);
   }
 
-  bool get allowNegativeStock =>
-      prefs.getBool(_kAllowNegativeStock) ?? false;
+  bool get allowNegativeStock => prefs.getBool(_kAllowNegativeStock) ?? false;
 
   Future<void> setAllowNegativeStock(bool value) async {
     await prefs.setBool(_kAllowNegativeStock, value);
@@ -98,15 +105,13 @@ class VanSalePrefs {
     await prefs.setBool(_kBackgroundSync, value);
   }
 
-  bool get autoSyncAfterWrite =>
-      prefs.getBool(_kAutoSyncAfterWrite) ?? false;
+  bool get autoSyncAfterWrite => prefs.getBool(_kAutoSyncAfterWrite) ?? false;
 
   Future<void> setAutoSyncAfterWrite(bool value) async {
     await prefs.setBool(_kAutoSyncAfterWrite, value);
   }
 
-  double get lowStockThreshold =>
-      prefs.getDouble(_kLowStockThreshold) ?? 5;
+  double get lowStockThreshold => prefs.getDouble(_kLowStockThreshold) ?? 5;
 
   Future<void> setLowStockThreshold(double value) async {
     final v = value.isFinite && value >= 0 ? value : 5.0;

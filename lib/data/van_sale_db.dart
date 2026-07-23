@@ -41,6 +41,19 @@ class VanSaleDb {
     return _db!;
   }
 
+  /// Close and drop the cached connection (used by backup restore).
+  Future<void> closeDatabase() async {
+    if (_db != null) {
+      await _db!.close();
+      _db = null;
+    }
+  }
+
+  Future<String> databasePath() async {
+    final dir = await getDatabasesPath();
+    return p.join(dir, 'van_sale.db');
+  }
+
   Future<Database> _open() async {
     final dir = await getDatabasesPath();
     final path = p.join(dir, 'van_sale.db');
@@ -940,8 +953,8 @@ DELETE FROM $table WHERE $idColumn NOT IN (
       'customers',
       {
         'sync_status': status.name,
-        if (erpName != null) 'erp_name': erpName,
-        if (erpModified != null) 'erp_modified': erpModified,
+        'erp_name': ?erpName,
+        'erp_modified': ?erpModified,
         'last_error': lastError,
         'updated_at': DateTime.now().toIso8601String(),
       },
@@ -1350,8 +1363,8 @@ LIMIT 1
       'products',
       {
         'sync_status': status.name,
-        if (erpName != null) 'erp_name': erpName,
-        if (erpModified != null) 'erp_modified': erpModified,
+        'erp_name': ?erpName,
+        'erp_modified': ?erpModified,
         'last_error': lastError,
         'updated_at': DateTime.now().toIso8601String(),
       },

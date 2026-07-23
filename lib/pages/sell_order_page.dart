@@ -14,6 +14,7 @@ import '../services/session.dart';
 import '../services/sync_service.dart';
 import '../services/van_sale_policy.dart';
 import '../widgets/widgets.dart';
+import 'barcode_scan_page.dart';
 
 /// Fullscreen sell cart — customer first, then add lines with large +/- steppers.
 class SellOrderPage extends StatefulWidget {
@@ -22,11 +23,13 @@ class SellOrderPage extends StatefulWidget {
     required this.session,
     required this.sync,
     this.initialCustomer,
+    this.tripId,
   });
 
   final VanSaleSession session;
   final SyncService sync;
   final String? initialCustomer;
+  final String? tripId;
 
   @override
   State<SellOrderPage> createState() => _SellOrderPageState();
@@ -146,6 +149,69 @@ class _SellOrderPageState extends State<SellOrderPage> {
     _setQty(stock, current + delta);
   }
 
+  Future<void> _bumpPriced(StockLine stock, double delta) async {
+    final priced = await _applyCustomerPrice(stock);
+    if (!mounted) return;
+    if (priced.unitPrice != stock.unitPrice) {
+      setState(() {
+        _vanStock = [
+          for (final s in _vanStock)
+            if (s.itemCode == priced.itemCode) priced else s,
+        ];
+      });
+    }
+    final current = _cart[priced.itemCode]?.qty ?? 0;
+    _setQty(priced, current + delta);
+  }
+
+  Future<StockLine> _applyCustomerPrice(StockLine line) async {
+    final product =
+        await productRepository.findByItemCode(line.itemCode) ??
+        await productRepository.findByBarcode(line.itemCode);
+    if (product == null) return line;
+    final preferCatalog =
+        (_customer?.priceList ?? '').isNotEmpty || line.unitPrice <= 0;
+    final rate = preferCatalog && product.sellingRate > 0
+        ? product.sellingRate
+        : (line.unitPrice > 0 ? line.unitPrice : product.displayPrice);
+    if (rate == line.unitPrice) return line;
+    return StockLine(
+      itemCode: line.itemCode,
+      itemName: line.itemName,
+      qty: line.qty,
+      uom: line.uom,
+      unitPrice: rate,
+    );
+  }
+
+  Future<void> _repriceCart() async {
+    if (_cart.isEmpty) return;
+    final next = <String, _CartLine>{};
+    for (final entry in _cart.entries) {
+      final priced = await _applyCustomerPrice(entry.value.stock);
+      next[entry.key] = _CartLine(stock: priced, qty: entry.value.qty);
+    }
+    if (!mounted) return;
+    setState(() {
+      _cart
+        ..clear()
+        ..addAll(next);
+      _vanStock = [
+        for (final s in _vanStock)
+          if (next.containsKey(s.itemCode))
+            StockLine(
+              itemCode: s.itemCode,
+              itemName: s.itemName,
+              qty: s.qty,
+              uom: s.uom,
+              unitPrice: next[s.itemCode]!.stock.unitPrice,
+            )
+          else
+            s,
+      ];
+    });
+  }
+
   Future<void> _pickCustomer() async {
     final picked = await Navigator.of(context).push<CustomerModel>(
       MaterialPageRoute(
@@ -164,6 +230,7 @@ class _SellOrderPageState extends State<SellOrderPage> {
       _customerLabel = picked.displayName;
       _banner = null;
     });
+    await _repriceCart();
   }
 
   Future<void> _createCustomer() async {
@@ -207,19 +274,61 @@ class _SellOrderPageState extends State<SellOrderPage> {
           uom: picked.stockUom,
           unitPrice: picked.displayPrice,
         );
+    final priced = await _applyCustomerPrice(line);
     if (existing == null) {
-      await vanSaleRepo.db.upsertStockLine(line);
+      await vanSaleRepo.db.upsertStockLine(priced);
     }
     if (!mounted) return;
     setState(() {
       final known = [
-        ..._vanStock.where((s) => s.itemCode != line.itemCode),
-        line,
+        ..._vanStock.where((s) => s.itemCode != priced.itemCode),
+        priced,
       ];
       _vanStock = known;
     });
-    final current = _cart[line.itemCode]?.qty ?? 0;
-    _setQty(line, current > 0 ? current : 1);
+    final current = _cart[priced.itemCode]?.qty ?? 0;
+    _setQty(priced, current > 0 ? current : 1);
+  }
+
+  Future<void> _scanBarcode() async {
+    final code = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const BarcodeScanPage()));
+    if (code == null || code.isEmpty || !mounted) return;
+    final hit = await productRepository.findByBarcode(code);
+    if (hit != null) {
+      await productRepository.markRecent(hit.id);
+      final existing =
+          await vanSaleRepo.getStock(hit.displayCode) ??
+          await vanSaleRepo.getStock(hit.itemCode);
+      final line =
+          existing ??
+          StockLine(
+            itemCode: hit.displayCode,
+            itemName: hit.itemName,
+            qty: hit.stockQty,
+            uom: hit.stockUom,
+            unitPrice: hit.displayPrice,
+          );
+      final priced = await _applyCustomerPrice(line);
+      if (existing == null) {
+        await vanSaleRepo.db.upsertStockLine(priced);
+      }
+      if (!mounted) return;
+      setState(() {
+        _vanStock = [
+          ..._vanStock.where((s) => s.itemCode != priced.itemCode),
+          priced,
+        ];
+      });
+      final current = _cart[priced.itemCode]?.qty ?? 0;
+      _setQty(priced, current > 0 ? current : 1);
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('No product for barcode "$code"')));
   }
 
   Future<void> _createProduct() async {
@@ -296,6 +405,7 @@ class _SellOrderPageState extends State<SellOrderPage> {
         customerName: customer,
         lines: lines,
         session: widget.sync.session,
+        tripId: widget.tripId,
       );
       // Local sale succeeded — never re-queue on flush failure.
       if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
@@ -323,6 +433,11 @@ class _SellOrderPageState extends State<SellOrderPage> {
       appBar: AppBar(
         title: const Text('New sale'),
         actions: [
+          IconButton(
+            tooltip: 'Scan barcode',
+            onPressed: _loading || _saving ? null : _scanBarcode,
+            icon: const Icon(Icons.qr_code_scanner),
+          ),
           IconButton(
             tooltip: 'Search product',
             onPressed: _loading || _saving ? null : _addFromSearch,
@@ -485,7 +600,7 @@ class _SellOrderPageState extends State<SellOrderPage> {
                               stock: s,
                               cartQty: qty,
                               enabled: !_saving,
-                              onAdd: () => _bump(s, 1),
+                              onAdd: () => _bumpPriced(s, 1),
                             ),
                           );
                         }),

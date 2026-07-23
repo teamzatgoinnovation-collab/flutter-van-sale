@@ -15,12 +15,14 @@ class OrdersPage extends StatefulWidget {
     super.key,
     required this.sync,
     this.initialCustomer,
+    this.initialTripId,
     this.onConsumedPrefill,
     this.onOpenMenu,
   });
 
   final SyncService sync;
   final String? initialCustomer;
+  final String? initialTripId;
   final VoidCallback? onConsumedPrefill;
   final VoidCallback? onOpenMenu;
 
@@ -41,8 +43,11 @@ class _OrdersPageState extends State<OrdersPage> {
     super.initState();
     _load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.initialCustomer != null) {
-        _newOrder(prefillCustomer: widget.initialCustomer);
+      if (widget.initialCustomer != null || widget.initialTripId != null) {
+        _newOrder(
+          prefillCustomer: widget.initialCustomer,
+          tripId: widget.initialTripId,
+        );
         widget.onConsumedPrefill?.call();
       }
     });
@@ -51,10 +56,15 @@ class _OrdersPageState extends State<OrdersPage> {
   @override
   void didUpdateWidget(covariant OrdersPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialCustomer != null &&
-        widget.initialCustomer != oldWidget.initialCustomer) {
+    if ((widget.initialCustomer != null &&
+            widget.initialCustomer != oldWidget.initialCustomer) ||
+        (widget.initialTripId != null &&
+            widget.initialTripId != oldWidget.initialTripId)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _newOrder(prefillCustomer: widget.initialCustomer);
+        _newOrder(
+          prefillCustomer: widget.initialCustomer,
+          tripId: widget.initialTripId,
+        );
         widget.onConsumedPrefill?.call();
       });
     }
@@ -72,7 +82,7 @@ class _OrdersPageState extends State<OrdersPage> {
     setState(() => _orders = orders);
   }
 
-  Future<void> _newOrder({String? prefillCustomer}) async {
+  Future<void> _newOrder({String? prefillCustomer, String? tripId}) async {
     if (_saving) return;
     setState(() => _saving = true);
     try {
@@ -83,6 +93,7 @@ class _OrdersPageState extends State<OrdersPage> {
             session: _session,
             sync: widget.sync,
             initialCustomer: prefillCustomer,
+            tripId: tripId,
           ),
         ),
       );
@@ -216,35 +227,38 @@ class _OrdersPageState extends State<OrdersPage> {
                                         o.customerName,
                                         style: theme.textTheme.titleMedium
                                             ?.copyWith(
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                                              fontWeight: FontWeight.w700,
+                                            ),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
                                         o.itemsLabel,
                                         style: theme.textTheme.bodyMedium
                                             ?.copyWith(
-                                          color: theme
-                                              .colorScheme.onSurfaceVariant,
-                                        ),
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
                                       ),
                                       const SizedBox(height: 6),
                                       Text(
                                         _whenLabel(o.createdAt),
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
-                                          color: theme
-                                              .colorScheme.onSurfaceVariant,
-                                        ),
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
                                       ),
                                       if ((o.erpName ?? '').isNotEmpty)
                                         Text(
                                           o.erpName!,
                                           style: theme.textTheme.labelSmall
                                               ?.copyWith(
-                                            color: theme
-                                                .colorScheme.onSurfaceVariant,
-                                          ),
+                                                color: theme
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
                                         ),
                                     ],
                                   ),
@@ -257,11 +271,11 @@ class _OrdersPageState extends State<OrdersPage> {
                                       money(o.amount),
                                       style: theme.textTheme.titleMedium
                                           ?.copyWith(
-                                        fontWeight: FontWeight.w800,
-                                        fontFeatures: const [
-                                          FontFeature.tabularFigures(),
-                                        ],
-                                      ),
+                                            fontWeight: FontWeight.w800,
+                                            fontFeatures: const [
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                          ),
                                     ),
                                     const SizedBox(height: 8),
                                     SyncBadge(status: o.syncStatus),

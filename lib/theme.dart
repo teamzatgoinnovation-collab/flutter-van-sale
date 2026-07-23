@@ -93,5 +93,23 @@ ThemeData buildVanSaleTheme({Brightness brightness = Brightness.light}) {
     listTileTheme: ListTileThemeData(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: scheme.primary,
+      foregroundColor: scheme.onPrimary,
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    ),
+    chipTheme: ChipThemeData(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: card,
+      modalBackgroundColor: card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+    ),
   );
 }

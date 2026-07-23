@@ -1,7 +1,13 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../data/van_sale_db.dart';
 import '../product/models/product_model.dart';
+import '../services/backup_service.dart';
+import '../services/catalog_excel_service.dart';
 import '../services/connection.dart';
 import '../services/prefs.dart';
 import '../services/session.dart';
@@ -21,6 +27,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _url;
   late final TextEditingController _warehouse;
+  late final TextEditingController _sourceWarehouse;
   late final TextEditingController _company;
   late final TextEditingController _lowStock;
   late VanSaleWorkMode _workMode;
@@ -34,12 +41,12 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     final prefs = VanSalePrefs.instance;
     _url = TextEditingController(text: prefs.siteUrl);
-    final profileWh =
-        widget.session.context?.profile?.warehouse.trim() ?? '';
+    final profileWh = widget.session.context?.profile?.warehouse.trim() ?? '';
     final warehouse = prefs.warehouse.trim().isNotEmpty
         ? prefs.warehouse
         : profileWh;
     _warehouse = TextEditingController(text: warehouse);
+    _sourceWarehouse = TextEditingController(text: prefs.sourceWarehouse);
     _company = TextEditingController(text: prefs.company);
     _lowStock = TextEditingController(
       text: prefs.lowStockThreshold.toStringAsFixed(
@@ -58,6 +65,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _url.dispose();
     _warehouse.dispose();
+    _sourceWarehouse.dispose();
     _company.dispose();
     _lowStock.dispose();
     super.dispose();
@@ -72,6 +80,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
     await prefs.setSiteUrl(nextUrl.isEmpty ? previousUrl : nextUrl);
     await prefs.setWarehouse(_warehouse.text.trim());
+    await prefs.setSourceWarehouse(_sourceWarehouse.text.trim());
     await prefs.setCompany(_company.text.trim());
     await prefs.setWorkMode(_workMode);
     await prefs.setAllowNegativeStock(_allowNegativeStock);
@@ -130,6 +139,134 @@ class _SettingsPageState extends State<SettingsPage> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(result.message)));
+  }
+
+  Future<void> _backupDb() async {
+    setState(() => _busy = true);
+    try {
+      await VanSaleBackupService(VanSaleDb.instance).shareBackup();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _restoreDb() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Restore database?'),
+        content: const Text(
+          'This replaces the local VanSale SQLite file. Unsynced outbox '
+          'work in the current DB will be lost.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Pick backup'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    final result = await FilePicker.platform.pickFiles(type: FileType.any);
+    final path = result?.files.single.path;
+    if (path == null) return;
+    setState(() => _busy = true);
+    try {
+      await VanSaleBackupService(VanSaleDb.instance).restoreFromPath(path);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Database restored')));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _exportExcel({required bool customers}) async {
+    setState(() => _busy = true);
+    try {
+      final excel = CatalogExcelService();
+      final file = customers
+          ? await excel.exportCustomers()
+          : await excel.exportProducts();
+      await excel.shareFile(
+        file,
+        subject: customers ? 'VanSale customers' : 'VanSale products',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _importExcel({required bool customers}) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['xlsx', 'xls'],
+    );
+    final path = result?.files.single.path;
+    if (path == null) return;
+    setState(() => _busy = true);
+    try {
+      final excel = CatalogExcelService();
+      final importFile = File(path);
+      final outcome = customers
+          ? await excel.importCustomers(importFile, widget.session)
+          : await excel.importProducts(importFile, widget.session);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(outcome.summary)));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _shareTemplates() async {
+    setState(() => _busy = true);
+    try {
+      final excel = CatalogExcelService();
+      final customers = await excel.templateCustomers();
+      await excel.shareFile(customers, subject: 'Customers template');
+      final products = await excel.templateProducts();
+      await excel.shareFile(products, subject: 'Products template');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Widget _sectionTitle(BuildContext context, String title) {
@@ -233,6 +370,16 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: _sourceWarehouse,
+            decoration: const InputDecoration(
+              labelText: 'Source / depot warehouse',
+              hintText: 'For Material Transfer into van',
+              prefixIcon: Icon(Icons.factory_outlined),
+              helperText: 'Used by Stock → Transfer in/out',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
             controller: _company,
             decoration: const InputDecoration(
               labelText: 'Company (optional)',
@@ -319,6 +466,51 @@ class _SettingsPageState extends State<SettingsPage> {
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
             ],
+          ),
+          _sectionTitle(context, 'Data'),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.backup_outlined),
+            title: const Text('Backup database'),
+            subtitle: const Text('Share a full SQLite copy'),
+            onTap: _busy ? null : _backupDb,
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.restore_outlined),
+            title: const Text('Restore database'),
+            subtitle: const Text('Replace local DB from a .db backup'),
+            onTap: _busy ? null : _restoreDb,
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.table_view_outlined),
+            title: const Text('Export customers (Excel)'),
+            onTap: _busy ? null : () => _exportExcel(customers: true),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.inventory_2_outlined),
+            title: const Text('Export products (Excel)'),
+            onTap: _busy ? null : () => _exportExcel(customers: false),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.upload_file_outlined),
+            title: const Text('Import customers (Excel)'),
+            onTap: _busy ? null : () => _importExcel(customers: true),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.upload_outlined),
+            title: const Text('Import products (Excel)'),
+            onTap: _busy ? null : () => _importExcel(customers: false),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('Share Excel templates'),
+            onTap: _busy ? null : _shareTemplates,
           ),
           const SizedBox(height: 24),
           FilledButton(

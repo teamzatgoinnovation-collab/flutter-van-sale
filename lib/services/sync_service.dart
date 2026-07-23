@@ -156,7 +156,7 @@ class SyncService extends ChangeNotifier {
           conflicts += batchResult.conflicts;
           progressCurrent = (progressCurrent + chunk.length).clamp(0, progressTotal);
           if (showUi) {
-            progressLabel = 'Batch ${progressCurrent}/$progressTotal';
+            progressLabel = 'Batch $progressCurrent/$progressTotal';
             notifyListeners();
           }
         }

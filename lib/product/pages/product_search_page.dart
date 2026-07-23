@@ -5,6 +5,7 @@ import '../../services/session.dart';
 import '../../services/sync_service.dart';
 import '../../services/van_sale_policy.dart';
 import '../../widgets/widgets.dart';
+import '../../pages/barcode_scan_page.dart';
 import '../models/product_model.dart';
 import '../repositories/product_repository.dart';
 import '../widgets/product_thumb.dart';
@@ -77,30 +78,41 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
   }
 
   Future<void> _barcodeSearch() async {
-    final controller = TextEditingController();
-    final code = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Scan barcode'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Scan or type barcode'),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Search'),
-          ),
-        ],
-      ),
-    );
-    if (code == null || code.isEmpty || !mounted) return;
+    final scanned = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const BarcodeScanPage()));
+    var code = scanned?.trim() ?? '';
+    if (code.isEmpty) {
+      if (!mounted) return;
+      final controller = TextEditingController();
+      code =
+          await showDialog<String>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Enter barcode'),
+              content: TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Type barcode if camera unavailable',
+                ),
+                onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+                  child: const Text('Search'),
+                ),
+              ],
+            ),
+          ) ??
+          '';
+    }
+    if (code.isEmpty || !mounted) return;
     final hit = await productRepository.findByBarcode(code);
     if (!mounted) return;
     if (hit != null) {
