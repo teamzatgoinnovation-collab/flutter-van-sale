@@ -403,18 +403,25 @@ class _SellOrderPageState extends State<SellOrderPage> {
       }
       final created = await vanSaleRepo.createOrder(
         customerName: customer,
+        customerErpName: _customer?.erpName,
         lines: lines,
         session: widget.sync.session,
         tripId: widget.tripId,
       );
       // Local sale succeeded — never re-queue on flush failure.
+      var flushNote = '';
       if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
         try {
-          await widget.sync.flush(pullTrips: false);
-        } catch (_) {}
+          final result = await widget.sync.flush(pullTrips: false);
+          if (result.failed > 0) {
+            flushNote = ' · ${result.failed} sync error(s) — retry in Sync';
+          }
+        } catch (e) {
+          flushNote = ' · sync failed: $e';
+        }
       }
       if (!mounted) return;
-      // Prefer post-flush row (erpName) when available.
+      // Prefer post-flush row (erpName + SI grand total) when available.
       VanOrder result = created;
       try {
         final refreshed = await vanSaleRepo.listOrders();
@@ -422,6 +429,14 @@ class _SellOrderPageState extends State<SellOrderPage> {
         if (match != null) result = match;
       } catch (_) {}
       if (!mounted) return;
+      if (flushNote.isNotEmpty &&
+          (result.erpName == null || result.erpName!.isEmpty)) {
+        // Carry sync failure into orders snackbar via a pending order that
+        // is not uploaded; also surface immediately here.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sale saved$flushNote')),
+        );
+      }
       Navigator.of(context).pop(result);
     } catch (e) {
       if (!mounted) return;

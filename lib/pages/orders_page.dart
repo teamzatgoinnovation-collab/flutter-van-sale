@@ -41,6 +41,7 @@ class _OrdersPageState extends State<OrdersPage> {
   @override
   void initState() {
     super.initState();
+    widget.sync.addListener(_onSyncChanged);
     _load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.initialCustomer != null || widget.initialTripId != null) {
@@ -53,9 +54,25 @@ class _OrdersPageState extends State<OrdersPage> {
     });
   }
 
+  void _onSyncChanged() {
+    if (!mounted || widget.sync.isRunning) return;
+    _load();
+  }
+
+  @override
+  void dispose() {
+    widget.sync.removeListener(_onSyncChanged);
+    _query.dispose();
+    super.dispose();
+  }
+
   @override
   void didUpdateWidget(covariant OrdersPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.sync != widget.sync) {
+      oldWidget.sync.removeListener(_onSyncChanged);
+      widget.sync.addListener(_onSyncChanged);
+    }
     if ((widget.initialCustomer != null &&
             widget.initialCustomer != oldWidget.initialCustomer) ||
         (widget.initialTripId != null &&
@@ -68,12 +85,6 @@ class _OrdersPageState extends State<OrdersPage> {
         widget.onConsumedPrefill?.call();
       });
     }
-  }
-
-  @override
-  void dispose() {
-    _query.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -125,12 +136,18 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
           );
         } else {
+          final pending = order?.syncStatus == SyncStatus.failed ||
+              order?.syncStatus == SyncStatus.pending ||
+              order?.syncStatus == SyncStatus.retry;
           messenger.showSnackBar(
             SnackBar(
               content: Text(
-                VanSalePolicy.instance.shouldAttemptFlushAfterWrite
-                    ? 'Sale saved · sync queued'
-                    : 'Sale saved locally',
+                pending &&
+                        VanSalePolicy.instance.shouldAttemptFlushAfterWrite
+                    ? 'Sale saved · invoice pending sync — open Sync to retry'
+                    : VanSalePolicy.instance.shouldAttemptFlushAfterWrite
+                        ? 'Sale saved · sync queued'
+                        : 'Sale saved locally',
               ),
             ),
           );

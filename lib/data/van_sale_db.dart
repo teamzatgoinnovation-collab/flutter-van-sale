@@ -618,6 +618,7 @@ CREATE TABLE IF NOT EXISTS sync_logs (
     required String id,
     required SyncStatus status,
     String? erpName,
+    double? amount,
     DatabaseExecutor? executor,
   }) async {
     final db = executor ?? await database;
@@ -626,6 +627,7 @@ CREATE TABLE IF NOT EXISTS sync_logs (
       {
         'sync_status': status.name,
         'erp_name': ?erpName,
+        'amount': ?amount,
         'updated_at': DateTime.now().toIso8601String(),
       },
       where: 'id = ?',

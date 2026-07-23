@@ -190,9 +190,13 @@ class VanSaleInvoiceService {
   }
 
   Future<Uint8List> fetchPdfBytes(String erpName) async {
+    final name = erpName.trim();
+    if (name.isEmpty) {
+      throw StateError('Invoice name missing');
+    }
     final env = await session.store.callMethod(
       VanSaleApiMethods.ordersPdf,
-      args: {'name': erpName},
+      args: {'name': name},
     );
     final data = env.data;
     if (data is! Map) {
@@ -207,7 +211,10 @@ class VanSaleInvoiceService {
 
   Future<void> openPdf(String erpName) async {
     final bytes = await fetchPdfBytes(erpName);
-    await Printing.layoutPdf(onLayout: (_) async => bytes, name: erpName);
+    await Printing.layoutPdf(
+      onLayout: (_) async => bytes,
+      name: erpName.trim(),
+    );
   }
 
   Future<void> printThermalReceipt({
@@ -239,10 +246,11 @@ class VanSaleInvoiceService {
   Future<void> sharePdf(String erpName) async {
     final bytes = await fetchPdfBytes(erpName);
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/$erpName.pdf');
+    final safe = erpName.trim().replaceAll(RegExp(r'[^\w.\-]+'), '_');
+    final file = File('${dir.path}/$safe.pdf');
     await file.writeAsBytes(bytes, flush: true);
     await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path)], subject: erpName),
+      ShareParams(files: [XFile(file.path)], subject: erpName.trim()),
     );
   }
 
@@ -251,6 +259,13 @@ class VanSaleInvoiceService {
     required VanSaleSession session,
     required String erpName,
   }) async {
+    final name = erpName.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invoice not synced yet')),
+      );
+      return;
+    }
     final service = VanSaleInvoiceService(session);
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -261,7 +276,7 @@ class VanSaleInvoiceService {
             ListTile(
               leading: const Icon(Icons.picture_as_pdf_outlined),
               title: const Text('Open invoice PDF'),
-              subtitle: Text(erpName),
+              subtitle: Text(name),
               onTap: () => Navigator.pop(ctx, 'open'),
             ),
             ListTile(
@@ -280,11 +295,13 @@ class VanSaleInvoiceService {
     );
     try {
       if (choice == 'open') {
-        await service.openPdf(erpName);
+        await service.openPdf(name);
       } else {
-        await service.sharePdf(erpName);
+        await service.sharePdf(name);
       }
+      if (context.mounted) messenger.hideCurrentSnackBar();
     } catch (e) {
+      messenger.hideCurrentSnackBar();
       messenger.showSnackBar(SnackBar(content: Text('Invoice: $e')));
     }
   }

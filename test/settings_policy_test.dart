@@ -73,6 +73,7 @@ void main() {
   test('createOrder blocks insufficient stock unless allow negative', () async {
     await VanSalePrefs.instance.setWorkMode(VanSaleWorkMode.onlineOffline);
     await VanSalePrefs.instance.setAllowNegativeStock(false);
+    await VanSalePrefs.instance.setWarehouse('Van-01');
     await VanSaleDb.instance.replaceStock(const [
       StockLine(
         itemCode: 'SKU-A',

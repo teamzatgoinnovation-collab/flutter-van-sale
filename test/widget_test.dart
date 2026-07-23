@@ -37,6 +37,7 @@ void main() {
     final repo = VanSaleRepo(db);
     await repo.init();
     await VanSalePrefs.instance.setWorkMode(VanSaleWorkMode.onlineOffline);
+    await VanSalePrefs.instance.setWarehouse('Van-01');
 
     final order = await repo.createOrder(
       customerName: 'City Grocer',

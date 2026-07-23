@@ -366,6 +366,7 @@ class SyncService extends ChangeNotifier {
             erpModified: (modified == null || modified.isEmpty)
                 ? null
                 : modified,
+            data: raw['data'],
           );
           await db.markQueueDone(id);
           await db.addSyncLog(
@@ -456,7 +457,12 @@ class SyncService extends ChangeNotifier {
         modified = '${(env.data as Map)['modified'] ?? ''}';
         if (modified.isEmpty) modified = null;
       }
-      await _markEntitySynced(item, erpName, erpModified: modified);
+      await _markEntitySynced(
+        item,
+        erpName,
+        erpModified: modified,
+        data: env.data,
+      );
       await db.markQueueDone(item.id);
       await db.addSyncLog(
         level: 'info',
@@ -499,6 +505,27 @@ class SyncService extends ChangeNotifier {
       args['force'] = item.args['force'] ?? 0;
       final modified = await _readErpModified('products', localId);
       if (modified != null) args['base_modified'] = modified;
+      return args;
+    }
+    if (item.entityType == 'van_order') {
+      final args = Map<String, dynamic>.from(item.args);
+      final customer = '${args['customer'] ?? ''}'.trim();
+      if (customer.isNotEmpty) {
+        // Prefer latest ERP customer id if local row synced after enqueue.
+        try {
+          final page = await customers.search(query: customer, limit: 8);
+          for (final c in page.items) {
+            final erp = (c.erpName ?? '').trim();
+            if (erp.isEmpty) continue;
+            if (c.customerName == customer ||
+                c.displayName == customer ||
+                erp == customer) {
+              args['customer'] = erp;
+              break;
+            }
+          }
+        } catch (_) {}
+      }
       return args;
     }
     return item.args;
@@ -584,13 +611,20 @@ class SyncService extends ChangeNotifier {
     SyncQueueItem item,
     String erpName, {
     String? erpModified,
+    Object? data,
   }) async {
     switch (item.entityType) {
       case 'van_order':
+        double? amount;
+        if (data is Map) {
+          amount = (data['amount'] as num?)?.toDouble() ??
+              (data['grand_total'] as num?)?.toDouble();
+        }
         await db.setOrderSync(
           id: item.entityId,
           status: SyncStatus.uploaded,
           erpName: erpName,
+          amount: amount,
         );
       case 'collection':
         await db.setCollectionSync(

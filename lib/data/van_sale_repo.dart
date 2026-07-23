@@ -134,6 +134,7 @@ class VanSaleRepo {
     required List<OrderLine> lines,
     VanSaleSession? session,
     String? tripId,
+    String? customerErpName,
   }) async {
     if (lines.isEmpty) {
       throw StateError('Order needs at least one stock line.');
@@ -142,10 +143,21 @@ class VanSaleRepo {
     final amount = lines.fold<double>(0, (s, l) => s + l.amount);
     final clientId = newClientId();
     final id = newLocalId('ord');
-    final warehouse = VanSalePrefs.instance.warehouse.trim();
+    var warehouse = VanSalePrefs.instance.warehouse.trim();
+    if (warehouse.isEmpty) {
+      warehouse = session?.context?.profile?.warehouse.trim() ?? '';
+    }
+    if (warehouse.isEmpty) {
+      throw StateError(
+        'Set van warehouse in Settings (or VanSale Profile) before selling.',
+      );
+    }
     final company = VanSalePrefs.instance.company.trim();
     final allowNegative = VanSalePolicy.instance.allowNegativeStock;
     final trip = tripId?.trim() ?? '';
+    final erpCustomer = (customerErpName ?? '').trim();
+    final customerForErp =
+        erpCustomer.isNotEmpty ? erpCustomer : customerName.trim();
     final order = VanOrder(
       id: id,
       clientId: clientId,
@@ -184,11 +196,11 @@ class VanSaleRepo {
         method: ZatGoApiMethods.goVanOrdersCreate,
         args: {
           'client_id': clientId,
-          'customer': customerName,
+          'customer': customerForErp,
           'items': [
             for (final l in lines) {...l.toJson(), 'rate': l.unitPrice},
           ],
-          if (warehouse.isNotEmpty) 'warehouse': warehouse,
+          'warehouse': warehouse,
           if (company.isNotEmpty) 'company': company,
           if (trip.isNotEmpty) 'trip_id': trip,
         },
