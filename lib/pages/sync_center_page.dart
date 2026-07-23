@@ -77,11 +77,16 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
     final result = await widget.sync.flush(mode: SyncMode.manual);
     await _reload();
     if (!mounted) return;
+    final skip = result.skippedReason;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Uploaded ${result.uploaded} · conflicts ${result.conflicts} · '
-          'failed ${result.failed}',
+          skip == 'offline'
+              ? 'Sync skipped — Offline work mode'
+              : skip == 'disconnected'
+                  ? 'Sync skipped — not signed in'
+                  : 'Uploaded ${result.uploaded} · conflicts ${result.conflicts} · '
+                      'failed ${result.failed}',
         ),
       ),
     );

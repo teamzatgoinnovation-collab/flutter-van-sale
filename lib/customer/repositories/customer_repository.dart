@@ -155,6 +155,7 @@ class CustomerRepository {
         }
         if (rows.isEmpty) break;
 
+        final openIds = await db.entityIdsWithActiveQueue('customer');
         for (final raw in rows) {
           if (raw is! Map) continue;
           final map = Map<String, dynamic>.from(raw);
@@ -164,10 +165,11 @@ class CustomerRepository {
           final existing =
               await db.getCustomer('erp_$erpName') ??
               await _findLocalByErpName(erpName);
-          if (existing != null &&
-              existing.syncStatus != SyncStatus.uploaded &&
-              existing.erpName == null) {
-            continue;
+          if (existing != null) {
+            final dirty = existing.syncStatus != SyncStatus.uploaded;
+            if (dirty || openIds.contains(existing.id)) {
+              continue;
+            }
           }
 
           final now = DateTime.now();

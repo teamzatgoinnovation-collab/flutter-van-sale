@@ -217,6 +217,7 @@ class VanSaleRepo {
     required String method,
     String? salesInvoice,
     VanSaleSession? session,
+    String? customerErpName,
   }) async {
     if (amount <= 0) throw StateError('Collection amount must be positive.');
     await VanSalePolicy.instance.assertCanMutate(session);
@@ -232,6 +233,10 @@ class VanSaleRepo {
       syncStatus: SyncStatus.pending,
     );
 
+    final erpCustomer = (customerErpName ?? '').trim();
+    final customerForErp =
+        erpCustomer.isNotEmpty ? erpCustomer : customerName.trim();
+
     final database = await db.database;
     await database.transaction((txn) async {
       await db.insertCollection(row, executor: txn);
@@ -243,7 +248,7 @@ class VanSaleRepo {
         method: ZatGoApiMethods.goVanCollectionsCreate,
         args: {
           'client_id': clientId,
-          'customer': customerName,
+          'customer': customerForErp,
           'amount': amount,
           'method': method,
           if (salesInvoice != null && salesInvoice.isNotEmpty)

@@ -128,16 +128,18 @@ class ProductRepository {
         }
         if (rows.isEmpty) break;
 
+        final openIds = await db.entityIdsWithActiveQueue('product');
         for (final raw in rows) {
           if (raw is! Map) continue;
           final map = Map<String, dynamic>.from(raw);
           final code = '${map['item_code'] ?? map['id'] ?? map['name'] ?? ''}';
           if (code.isEmpty) continue;
           final existing = await db.getProductByCode(code);
-          if (existing != null &&
-              existing.syncStatus != SyncStatus.uploaded &&
-              existing.erpName == null) {
-            continue;
+          if (existing != null) {
+            final dirty = existing.syncStatus != SyncStatus.uploaded;
+            if (dirty || openIds.contains(existing.id)) {
+              continue;
+            }
           }
           final now = DateTime.now();
           final rate =

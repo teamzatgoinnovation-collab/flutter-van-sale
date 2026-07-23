@@ -100,10 +100,18 @@ class SyncService extends ChangeNotifier {
         level: 'info',
         message: 'Sync skipped (Offline work mode)',
       );
-      return const SyncFlushResult();
+      const result = SyncFlushResult(skippedReason: 'offline');
+      lastResult = result;
+      return result;
     }
     if (!session.connected) {
-      return const SyncFlushResult();
+      await db.addSyncLog(
+        level: 'info',
+        message: 'Sync skipped (not signed in)',
+      );
+      const result = SyncFlushResult(skippedReason: 'disconnected');
+      lastResult = result;
+      return result;
     }
     final existing = _inFlight;
     if (existing != null) {
@@ -200,6 +208,24 @@ class SyncService extends ChangeNotifier {
             progressLabel = '${item.entityType} ${item.op}';
             notifyListeners();
           }
+          // Defer sales/collections until their customer exists on ERP.
+          if (item.entityType == 'van_order' ||
+              item.entityType == 'collection') {
+            final ready = await _customerReadyForTxn(item);
+            if (!ready) {
+              await db.addSyncLog(
+                level: 'warn',
+                message:
+                    'Deferred ${item.entityType} ${item.entityId} — customer not synced',
+                entityType: item.entityType,
+                entityId: item.entityId,
+                queueId: item.id,
+              );
+              progressCurrent++;
+              if (showUi) notifyListeners();
+              continue;
+            }
+          }
           final ok = await _flushOne(
             item,
             continueOnFailure: continueOnFailure == 1,
@@ -219,6 +245,25 @@ class SyncService extends ChangeNotifier {
             progressLabel = '${item.entityType} ${item.op}';
             notifyListeners();
           }
+          if (item.entityType == 'van_order' ||
+              item.entityType == 'collection') {
+            final ready = await _customerReadyForTxn(item);
+            if (!ready) {
+              await db.markQueueRetry(item.id);
+              await _markEntityStatus(item, SyncStatus.pending);
+              await db.addSyncLog(
+                level: 'warn',
+                message:
+                    'Deferred ${item.entityType} ${item.entityId} — customer not synced',
+                entityType: item.entityType,
+                entityId: item.entityId,
+                queueId: item.id,
+              );
+              progressCurrent++;
+              if (showUi) notifyListeners();
+              continue;
+            }
+          }
           final ok = await _flushOne(item, continueOnFailure: true);
           if (ok == _FlushOutcome.uploaded) uploaded++;
           if (ok == _FlushOutcome.failed) failed++;
@@ -228,8 +273,9 @@ class SyncService extends ChangeNotifier {
         }
       }
 
-      if (pullTrips) {
-        // Catalog / trips pull is always silent — no banner label.
+      // Skip catalog pull after failed uploads so dirty/local stock is not
+      // overwritten before the user can retry.
+      if (pullTrips && failed == 0) {
         await repo.refreshFromErpnext(session);
         await products.refreshFromErp(session);
         await customers.refreshFromErp(session);
@@ -237,6 +283,11 @@ class SyncService extends ChangeNotifier {
           progressCurrent = progressTotal;
           notifyListeners();
         }
+      } else if (pullTrips && failed > 0) {
+        await db.addSyncLog(
+          level: 'info',
+          message: 'Catalog pull skipped ($failed failed uploads)',
+        );
       }
 
       final result = SyncFlushResult(
@@ -267,14 +318,7 @@ class SyncService extends ChangeNotifier {
     if (items.isEmpty) return const SyncFlushResult();
     final ops = <Map<String, dynamic>>[];
     for (final item in items) {
-      await db.database.then(
-        (d) => d.update(
-          'sync_queue',
-          {'status': 'uploading', 'attempts': item.attempts + 1},
-          where: 'id = ?',
-          whereArgs: [item.id],
-        ),
-      );
+      await db.claimById(item.id);
       await _markEntityStatus(item, SyncStatus.uploading);
       final args = await _resolveArgs(item);
       ops.add({
@@ -305,6 +349,7 @@ class SyncService extends ChangeNotifier {
       var uploaded = 0;
       var failed = 0;
       var conflicts = 0;
+      final seen = <String>{};
 
       for (final raw in results) {
         if (raw is! Map) continue;
@@ -324,6 +369,7 @@ class SyncService extends ChangeNotifier {
           );
           continue;
         }
+        seen.add(id);
         final item = matched;
         if (raw['conflict'] == true) {
           conflicts++;
@@ -342,8 +388,10 @@ class SyncService extends ChangeNotifier {
           continue;
         }
         if (raw['success'] == true) {
-          final erpName = _extractErpName(item, raw['data']);
-          if (erpName == null || erpName.isEmpty) {
+          final data = raw['data'];
+          final softAck = _isSoftDeleteAck(item, data);
+          final erpName = _extractErpName(item, data);
+          if (!softAck && (erpName == null || erpName.isEmpty)) {
             failed++;
             const err = 'Server ack missing name';
             await db.markQueueFailed(id, err);
@@ -358,21 +406,23 @@ class SyncService extends ChangeNotifier {
             continue;
           }
           uploaded++;
-          final modified = raw['data'] is Map
-              ? '${(raw['data'] as Map)['modified'] ?? ''}'
+          final modified = data is Map
+              ? '${data['modified'] ?? ''}'
               : null;
           await _markEntitySynced(
             item,
-            erpName,
+            erpName ?? item.entityId,
             erpModified: (modified == null || modified.isEmpty)
                 ? null
                 : modified,
-            data: raw['data'],
+            data: data,
           );
           await db.markQueueDone(id);
           await db.addSyncLog(
             level: 'info',
-            message: 'Uploaded ${item.entityType} → $erpName',
+            message: softAck
+                ? 'Acked delete ${item.entityType} ${item.entityId}'
+                : 'Uploaded ${item.entityType} → $erpName',
             entityType: item.entityType,
             entityId: item.entityId,
             queueId: id,
@@ -391,6 +441,22 @@ class SyncService extends ChangeNotifier {
           );
         }
       }
+
+      for (final item in items) {
+        if (seen.contains(item.id)) continue;
+        failed++;
+        const err = 'Batch result missing';
+        await db.markQueueFailed(item.id, err);
+        await _markEntityStatus(item, SyncStatus.failed, error: err);
+        await db.addSyncLog(
+          level: 'error',
+          message: err,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          queueId: item.id,
+        );
+      }
+
       return SyncFlushResult(
         uploaded: uploaded,
         failed: failed,
@@ -426,6 +492,7 @@ class SyncService extends ChangeNotifier {
     required bool continueOnFailure,
   }) async {
     try {
+      await db.claimById(item.id);
       await _markEntityStatus(item, SyncStatus.uploading);
       final args = await _resolveArgs(item);
       final env = await session.store.callMethod(item.method, args: args);
@@ -449,8 +516,9 @@ class SyncService extends ChangeNotifier {
         );
         return _FlushOutcome.conflict;
       }
+      final softAck = _isSoftDeleteAck(item, env.data);
       final erpName = _extractErpName(item, env.data);
-      if (erpName == null || erpName.isEmpty) {
+      if (!softAck && (erpName == null || erpName.isEmpty)) {
         throw StateError('Server ack missing name for ${item.method}');
       }
       String? modified;
@@ -460,14 +528,16 @@ class SyncService extends ChangeNotifier {
       }
       await _markEntitySynced(
         item,
-        erpName,
+        erpName ?? item.entityId,
         erpModified: modified,
         data: env.data,
       );
       await db.markQueueDone(item.id);
       await db.addSyncLog(
         level: 'info',
-        message: 'Uploaded ${item.entityType} → $erpName',
+        message: softAck
+            ? 'Acked delete ${item.entityType} ${item.entityId}'
+            : 'Uploaded ${item.entityType} → $erpName',
         queueId: item.id,
         entityType: item.entityType,
         entityId: item.entityId,
@@ -508,28 +578,76 @@ class SyncService extends ChangeNotifier {
       if (modified != null) args['base_modified'] = modified;
       return args;
     }
-    if (item.entityType == 'van_order') {
+    if (item.entityType == 'van_order' || item.entityType == 'collection') {
       final args = Map<String, dynamic>.from(item.args);
       final customer = '${args['customer'] ?? ''}'.trim();
       if (customer.isNotEmpty) {
-        // Prefer latest ERP customer id if local row synced after enqueue.
-        try {
-          final page = await customers.search(query: customer, limit: 8);
-          for (final c in page.items) {
-            final erp = (c.erpName ?? '').trim();
-            if (erp.isEmpty) continue;
-            if (c.customerName == customer ||
-                c.displayName == customer ||
-                erp == customer) {
-              args['customer'] = erp;
-              break;
-            }
-          }
-        } catch (_) {}
+        final erp = await _resolveCustomerErp(customer);
+        if (erp != null && erp.isNotEmpty) {
+          args['customer'] = erp;
+        }
       }
       return args;
     }
     return item.args;
+  }
+
+  /// Map local display / client id / ERP name → ERP Customer name.
+  Future<String?> _resolveCustomerErp(String customer) async {
+    final key = customer.trim();
+    if (key.isEmpty) return null;
+    try {
+      final byId = await customers.get(key);
+      if (byId != null) {
+        final erp = (byId.erpName ?? '').trim();
+        if (erp.isNotEmpty) return erp;
+      }
+      final page = await customers.search(query: key, limit: 12);
+      for (final c in page.items) {
+        final erp = (c.erpName ?? '').trim();
+        if (erp.isEmpty) continue;
+        if (erp == key ||
+            c.id == key ||
+            c.clientId == key ||
+            c.customerName == key ||
+            c.displayName == key) {
+          return erp;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// True when order/collection customer already has an ERP name (or is ERP id).
+  Future<bool> _customerReadyForTxn(SyncQueueItem item) async {
+    final customer = '${item.args['customer'] ?? ''}'.trim();
+    if (customer.isEmpty) return false;
+    final erp = await _resolveCustomerErp(customer);
+    if (erp != null && erp.isNotEmpty) return true;
+    // Still waiting on a local customer create/update in the outbox.
+    final open = await db.entityIdsWithActiveQueue('customer');
+    if (open.isEmpty) {
+      // No pending customer — treat string as already-ERP (legacy rows).
+      return true;
+    }
+    final page = await customers.search(query: customer, limit: 8);
+    for (final c in page.items) {
+      if (c.customerName == customer ||
+          c.displayName == customer ||
+          c.id == customer ||
+          c.clientId == customer) {
+        return !open.contains(c.id);
+      }
+    }
+    return true;
+  }
+
+  bool _isSoftDeleteAck(SyncQueueItem item, Object? data) {
+    if (item.op != 'delete') return false;
+    if (data is! Map) return false;
+    final deleted = data['deleted'] == true || data['deleted'] == 1;
+    final missing = data['missing'] == true || data['missing'] == 1;
+    return deleted || missing;
   }
 
   Future<String?> _readErpModified(String table, String id) async {
@@ -571,9 +689,8 @@ class SyncService extends ChangeNotifier {
       limit: 1,
     );
     if (rows.isEmpty) return;
-    final args = Map<String, dynamic>.from(
-      jsonDecode('${rows.first['args_json']}') as Map? ?? {},
-    );
+    final item = db.queueItemFromRow(rows.first);
+    final args = Map<String, dynamic>.from(item.args);
     args['force'] = 1;
     await database.update(
       'sync_queue',
@@ -585,23 +702,39 @@ class SyncService extends ChangeNotifier {
       where: 'id = ?',
       whereArgs: [queueId],
     );
+    await _markEntityStatus(item, SyncStatus.pending);
     await db.addSyncLog(
       level: 'info',
       message: 'Conflict resolved: keep local ($queueId)',
       queueId: queueId,
+      entityType: item.entityType,
+      entityId: item.entityId,
     );
     notifyListeners();
   }
 
   Future<void> resolveConflictTakeServer(String queueId) async {
-    // Drop local pending write; next pull will refresh.
+    final database = await db.database;
+    final rows = await database.query(
+      'sync_queue',
+      where: 'id = ?',
+      whereArgs: [queueId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    final item = db.queueItemFromRow(rows.first);
+    // Drop local pending write; pull refreshes from ERP.
     await db.markQueueDone(queueId);
+    await _markEntityStatus(item, SyncStatus.uploaded);
     await db.addSyncLog(
       level: 'info',
       message: 'Conflict resolved: take server ($queueId)',
       queueId: queueId,
+      entityType: item.entityType,
+      entityId: item.entityId,
     );
     if (session.connected) {
+      await customers.refreshFromErp(session);
       await products.refreshFromErp(session);
       await repo.refreshFromErpnext(session);
     }
@@ -707,6 +840,7 @@ class SyncFlushResult {
     this.processed = 0,
     // legacy aliases
     this.awaitingErp = 0,
+    this.skippedReason,
   });
 
   final int uploaded;
@@ -715,4 +849,9 @@ class SyncFlushResult {
   final int retried;
   final int processed;
   final int awaitingErp;
+
+  /// When set, flush did not run (e.g. `offline`, `disconnected`).
+  final String? skippedReason;
+
+  bool get wasSkipped => skippedReason != null && skippedReason!.isNotEmpty;
 }

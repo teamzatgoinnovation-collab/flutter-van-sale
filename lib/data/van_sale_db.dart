@@ -1499,6 +1499,8 @@ LIMIT 1
 
   // --- sync queue ---
 
+  static const _pendingReplaceMarker = '__pending_replace__';
+
   Future<void> enqueue({
     required String clientId,
     required String entityType,
@@ -1511,9 +1513,10 @@ LIMIT 1
   }) async {
     final db = executor ?? await database;
     // Stable primary key for (entity, op) so create is idempotent / visit replaceable.
-    var id = 'sq_${entityType}_${entityId}_$op';
-    // Never replace an in-flight row — a successful flush would delete the
-    // newer args that replaced it mid-upload.
+    final id = 'sq_${entityType}_${entityId}_$op';
+
+    // If a replace arrives while uploading, overwrite args on the same row and
+    // mark dirty so markQueueDone re-queues instead of deleting (UNIQUE-safe).
     if (conflict == ConflictAlgorithm.replace) {
       final existing = await db.query(
         'sync_queue',
@@ -1524,11 +1527,21 @@ LIMIT 1
       );
       if (existing.isNotEmpty &&
           '${existing.first['status']}' == 'uploading') {
-        id =
-            'sq_${entityType}_${entityId}_${op}_${DateTime.now().millisecondsSinceEpoch}';
-        conflict = ConflictAlgorithm.abort;
+        await db.update(
+          'sync_queue',
+          {
+            'client_id': clientId,
+            'method': method,
+            'args_json': jsonEncode(args),
+            'last_error': _pendingReplaceMarker,
+          },
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        return;
       }
     }
+
     await db.insert('sync_queue', {
       'id': id,
       'client_id': clientId,
@@ -1595,9 +1608,61 @@ LIMIT 1
     });
   }
 
+  Future<void> claimById(String id) async {
+    final db = await database;
+    await db.rawUpdate(
+      '''
+UPDATE sync_queue
+SET status = 'uploading', attempts = attempts + 1
+WHERE id = ?
+  AND status IN ('pending', 'retry', 'queued', 'uploading')
+''',
+      [id],
+    );
+  }
+
+  Future<bool> _requeueIfDirty(String id) async {
+    final db = await database;
+    final rows = await db.query(
+      'sync_queue',
+      columns: ['last_error'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return false;
+    if ('${rows.first['last_error']}' != _pendingReplaceMarker) return false;
+    await db.update(
+      'sync_queue',
+      {
+        'status': 'pending',
+        'last_error': null,
+        'attempts': 0,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    return true;
+  }
+
   Future<void> markQueueDone(String id) async {
+    if (await _requeueIfDirty(id)) return;
     final db = await database;
     await db.delete('sync_queue', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Entity ids with in-flight / pending queue (excludes failed/conflict).
+  Future<Set<String>> entityIdsWithActiveQueue(String entityType) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      '''
+SELECT DISTINCT entity_id FROM sync_queue
+WHERE entity_type = ?
+  AND status IN ('pending', 'retry', 'queued', 'uploading')
+''',
+      [entityType],
+    );
+    return {for (final r in rows) '${r['entity_id']}'};
   }
 
   /// Entity ids that still have open sync_queue rows (any non-terminal status).
@@ -1622,7 +1687,7 @@ WHERE entity_type = ?
       '''
 SELECT 1 FROM sync_queue
 WHERE entity_type IN ($placeholders)
-  AND status IN ('pending', 'retry', 'queued', 'failed', 'uploading', 'conflict')
+  AND status IN ('pending', 'retry', 'queued', 'uploading', 'failed', 'conflict')
 LIMIT 1
 ''',
       entityTypes,
@@ -1641,6 +1706,7 @@ LIMIT 1
   }
 
   Future<void> markQueueFailed(String id, String error) async {
+    if (await _requeueIfDirty(id)) return;
     final db = await database;
     await db.update(
       'sync_queue',
@@ -1651,6 +1717,7 @@ LIMIT 1
   }
 
   Future<void> markQueueConflict(String id, String error) async {
+    if (await _requeueIfDirty(id)) return;
     final db = await database;
     await db.update(
       'sync_queue',
@@ -1672,27 +1739,50 @@ LIMIT 1
 
   Future<void> requeueFailed(String id) async {
     final db = await database;
+    // Conflicts require Keep Local (force) or Take Server — not a blind retry.
     await db.update(
       'sync_queue',
       {'status': 'retry', 'last_error': null},
-      where: 'id = ? AND status IN (?, ?, ?)',
-      whereArgs: [id, 'failed', 'conflict', 'retry'],
+      where: 'id = ? AND status IN (?, ?)',
+      whereArgs: [id, 'failed', 'retry'],
     );
   }
 
   Future<int> requeueAllFailed() async {
     final db = await database;
+    // Conflicts need an explicit force resolve — don't blindly retry them.
     return db.update('sync_queue', {
       'status': 'retry',
       'last_error': null,
-    }, where: "status IN ('failed','conflict')");
+    }, where: "status = 'failed'");
   }
 
   Future<void> requeueInFlightAsQueued() async {
     final db = await database;
+    final rows = await db.query(
+      'sync_queue',
+      columns: ['id', 'entity_type', 'entity_id'],
+      where: "status IN ('uploading','in_flight')",
+    );
     await db.update('sync_queue', {
       'status': 'pending',
     }, where: "status IN ('uploading','in_flight')");
+    for (final r in rows) {
+      final type = '${r['entity_type']}';
+      final id = '${r['entity_id']}';
+      switch (type) {
+        case 'van_order':
+          await setOrderSync(id: id, status: SyncStatus.pending);
+        case 'collection':
+          await setCollectionSync(id: id, status: SyncStatus.pending);
+        case 'customer':
+          await setCustomerSync(id: id, status: SyncStatus.pending);
+        case 'product':
+          await setProductSync(id: id, status: SyncStatus.pending);
+        default:
+          break;
+      }
+    }
   }
 
   Future<void> addSyncLog({
@@ -1851,6 +1941,8 @@ DELETE FROM sync_logs WHERE id NOT IN (
       erpName: r['erp_name'] == null ? null : '${r['erp_name']}',
     );
   }
+
+  SyncQueueItem queueItemFromRow(Map<String, Object?> r) => _queueFromRow(r);
 
   SyncQueueItem _queueFromRow(Map<String, Object?> r) {
     final decoded = jsonDecode('${r['args_json']}');

@@ -215,6 +215,7 @@ class _CollectionsPageState extends State<CollectionsPage> {
           method: method,
           salesInvoice: salesInvoice,
           session: widget.sync.session,
+          customerErpName: selected?.erpName,
         );
         if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
           try {
