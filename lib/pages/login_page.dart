@@ -34,7 +34,14 @@ class _LoginPageState extends State<LoginPage>
   @override
   void initState() {
     super.initState();
-    widget.session.updateBaseUrl(VanSalePrefs.instance.siteUrl);
+    // updateBaseUrl calls notifyListeners() which triggers setState() on
+    // VanSaleApp. Calling it directly in initState() fires during the build
+    // phase and causes the "setState() called during build" assertion.
+    // Defer to after the first frame so the tree is fully mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.session.updateBaseUrl(VanSalePrefs.instance.siteUrl);
+    });
     _enter = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 480),

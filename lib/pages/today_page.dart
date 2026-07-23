@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../data/van_sale_repo.dart';
 import '../models/models.dart';
+import '../services/aging_service.dart';
 import '../services/sync_service.dart';
+import '../widgets/aging_summary_card.dart';
 import '../widgets/widgets.dart';
+import 'aging_page.dart';
 
 class TodayPage extends StatefulWidget {
   const TodayPage({
@@ -15,7 +19,7 @@ class TodayPage extends StatefulWidget {
   });
 
   final SyncService sync;
-  final void Function(String customer) onSell;
+  final void Function(String customer, {String? tripId}) onSell;
   final void Function(String customer) onCollect;
   final VoidCallback? onOpenMenu;
 
@@ -27,6 +31,7 @@ class _TodayPageState extends State<TodayPage> {
   bool _busy = false;
   DaySummary? _summary;
   List<RouteStop> _stops = const [];
+  AgingSummary? _aging;
 
   @override
   void initState() {
@@ -37,10 +42,22 @@ class _TodayPageState extends State<TodayPage> {
   Future<void> _load() async {
     final summary = await vanSaleRepo.summary();
     final stops = await vanSaleRepo.listStops();
+    AgingSummary? aging;
+    final session = widget.sync.session;
+    if (session.connected) {
+      try {
+        aging = await AgingService(session).summary();
+      } catch (_) {
+        aging = await AgingService(session).loadCachedSummary();
+      }
+    } else {
+      aging = await AgingService(session).loadCachedSummary();
+    }
     if (!mounted) return;
     setState(() {
       _summary = summary;
       _stops = stops;
+      _aging = aging;
     });
   }
 
@@ -71,8 +88,35 @@ class _TodayPageState extends State<TodayPage> {
     );
   }
 
+  Future<({double? lat, double? lng})> _currentGps() async {
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return (lat: null, lng: null);
+      }
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) return (lat: null, lng: null);
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      return (lat: pos.latitude, lng: pos.longitude);
+    } catch (_) {
+      return (lat: null, lng: null);
+    }
+  }
+
   Future<void> _setVisit(RouteStop stop, VisitStatus status) async {
-    await vanSaleRepo.updateVisit(stop.id, status);
+    final gps = status == VisitStatus.checkedIn
+        ? await _currentGps()
+        : (lat: null, lng: null);
+    await vanSaleRepo.updateVisit(stop.id, status, lat: gps.lat, lng: gps.lng);
     await widget.sync.flush(pullTrips: false);
     await _load();
   }
@@ -125,30 +169,51 @@ class _TodayPageState extends State<TodayPage> {
                   physics: const NeverScrollableScrollPhysics(),
                   mainAxisSpacing: 10,
                   crossAxisSpacing: 10,
-                  childAspectRatio: 1.35,
+                  childAspectRatio: 1.15,
                   children: [
-                    StatTile(
-                      label: 'Stops done',
+                    KpiCard(
+                      title: 'Stops done',
                       value: '${summary.stopsDone}/${summary.stopsTotal}',
                       icon: Icons.route_outlined,
+                      accentColor: const Color(0xFF0F4C5C),
+                      subtitle: summary.stopsTotal > 0
+                          ? '${((summary.stopsDone / summary.stopsTotal) * 100).toInt()}% completed'
+                          : null,
                     ),
-                    StatTile(
-                      label: 'Orders open',
+                    KpiCard(
+                      title: 'Orders open',
                       value: '${summary.ordersQueued}',
                       icon: Icons.outbox_outlined,
+                      accentColor: const Color(0xFFE36414),
                     ),
-                    StatTile(
-                      label: 'Collections',
+                    KpiCard(
+                      title: 'Collections today',
                       value: money(summary.collectionsToday),
                       icon: Icons.payments_outlined,
+                      accentColor: const Color(0xFF2A9D8F),
                     ),
-                    StatTile(
-                      label: 'Van SKUs',
+                    KpiCard(
+                      title: 'Van SKUs in stock',
                       value: '${summary.vanStockSku}',
                       icon: Icons.inventory_2_outlined,
+                      accentColor: Colors.indigo,
                     ),
                   ],
                 ),
+                if (_aging != null) ...[
+                  const SizedBox(height: 12),
+                  AgingSummaryCard(
+                    summary: _aging!,
+                    onOpenDetail: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) =>
+                              AgingPage(session: widget.sync.session),
+                        ),
+                      );
+                    },
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Card(
                   child: Padding(
@@ -224,7 +289,8 @@ class _TodayPageState extends State<TodayPage> {
                       onCheckIn: () => _setVisit(stop, VisitStatus.checkedIn),
                       onComplete: () => _setVisit(stop, VisitStatus.completed),
                       onSkip: () => _setVisit(stop, VisitStatus.skipped),
-                      onSell: () => widget.onSell(stop.customerName),
+                      onSell: () =>
+                          widget.onSell(stop.customerName, tripId: stop.id),
                       onCollect: () => widget.onCollect(stop.customerName),
                     ),
                   ),

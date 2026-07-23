@@ -115,34 +115,38 @@ class _AdminOverviewPageState extends State<AdminOverviewPage> {
                           physics: const NeverScrollableScrollPhysics(),
                           mainAxisSpacing: 10,
                           crossAxisSpacing: 10,
-                          childAspectRatio: 1.35,
+                          childAspectRatio: 1.15,
                           children: [
-                            StatTile(
-                              label: 'Stops done',
+                            KpiCard(
+                              title: 'Stops done',
                               value:
                                   '${s?['stops_done'] ?? 0}/${s?['stops_total'] ?? 0}',
                               icon: Icons.route_outlined,
+                              accentColor: const Color(0xFF0F4C5C),
                             ),
-                            StatTile(
-                              label: 'Sales',
+                            KpiCard(
+                              title: 'Sales total',
                               value: money(
                                 (s?['sales_total'] as num?)?.toDouble() ?? 0,
                               ),
                               icon: Icons.point_of_sale_outlined,
+                              accentColor: const Color(0xFFE36414),
                             ),
-                            StatTile(
-                              label: 'Collections',
+                            KpiCard(
+                              title: 'Collections',
                               value: money(
                                 (s?['collections_total'] as num?)
                                         ?.toDouble() ??
                                     0,
                               ),
                               icon: Icons.payments_outlined,
+                              accentColor: const Color(0xFF2A9D8F),
                             ),
-                            StatTile(
-                              label: 'Orders',
+                            KpiCard(
+                              title: 'Total orders',
                               value: '${s?['orders_count'] ?? 0}',
                               icon: Icons.receipt_long_outlined,
+                              accentColor: Colors.indigo,
                             ),
                           ],
                         ),
