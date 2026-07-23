@@ -6,6 +6,7 @@ import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
 import 'prefs.dart';
 import 'van_sale_api_methods.dart';
 import 'van_sale_context.dart';
+import 'van_sale_policy.dart';
 
 /// Password-session state for VanSale (user + admin).
 class VanSaleSession extends ChangeNotifier {
@@ -109,6 +110,7 @@ class VanSaleSession extends ChangeNotifier {
     lastError = null;
     context = null;
     preferUserMode = false;
+    VanSalePolicy.instance.invalidateOnlineReachability();
     notifyListeners();
   }
 

@@ -7,6 +7,7 @@ import '../../data/van_sale_db.dart';
 import '../../models/models.dart';
 import '../../services/prefs.dart';
 import '../../services/session.dart';
+import '../../services/van_sale_policy.dart';
 import '../mappers/product_sync_mapper.dart';
 import '../models/product_model.dart';
 import '../validation/product_validators.dart';
@@ -237,7 +238,11 @@ class ProductRepository {
   Future<void> recordSales(List<OrderLine> lines) =>
       db.recordProductSales(lines);
 
-  Future<ProductModel> createLocal(ProductDraft draft) async {
+  Future<ProductModel> createLocal(
+    ProductDraft draft, {
+    VanSaleSession? session,
+  }) async {
+    await VanSalePolicy.instance.assertCanMutate(session);
     draft.applyDefaults(_defaults);
     final errors = ProductValidators.validate(
       itemCode: draft.itemCode,
@@ -332,7 +337,12 @@ class ProductRepository {
   }
 
   /// Update product locally (incl. images) and enqueue create/update.
-  Future<ProductModel> updateLocal(String id, ProductDraft draft) async {
+  Future<ProductModel> updateLocal(
+    String id,
+    ProductDraft draft, {
+    VanSaleSession? session,
+  }) async {
+    await VanSalePolicy.instance.assertCanMutate(session);
     final existing = await db.getProduct(id);
     if (existing == null) throw StateError('Product $id not found');
     draft.applyDefaults(_defaults);
@@ -449,7 +459,8 @@ class ProductRepository {
   }
 
   /// Soft-delete (disable) on ERP when synced; otherwise remove local only.
-  Future<void> deleteLocal(String id) async {
+  Future<void> deleteLocal(String id, {VanSaleSession? session}) async {
+    await VanSalePolicy.instance.assertCanMutate(session);
     final existing = await db.getProduct(id);
     if (existing == null) return;
     final neverSynced = existing.erpName == null || existing.erpName!.isEmpty;

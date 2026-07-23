@@ -5,6 +5,7 @@ import '../data/van_sale_repo.dart';
 import '../models/models.dart';
 import '../services/aging_service.dart';
 import '../services/sync_service.dart';
+import '../services/van_sale_policy.dart';
 import '../widgets/aging_summary_card.dart';
 import '../widgets/widgets.dart';
 import 'aging_page.dart';
@@ -62,6 +63,15 @@ class _TodayPageState extends State<TodayPage> {
   }
 
   Future<void> _sync() async {
+    if (!VanSalePolicy.instance.syncAllowed) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sync disabled — Offline work mode. Switch in Settings.'),
+        ),
+      );
+      return;
+    }
     setState(() => _busy = true);
     final result = await widget.sync.flush();
     await _load();
@@ -116,8 +126,18 @@ class _TodayPageState extends State<TodayPage> {
     final gps = status == VisitStatus.checkedIn
         ? await _currentGps()
         : (lat: null, lng: null);
-    await vanSaleRepo.updateVisit(stop.id, status, lat: gps.lat, lng: gps.lng);
-    await widget.sync.flush(pullTrips: false);
+    await vanSaleRepo.updateVisit(
+      stop.id,
+      status,
+      session: widget.sync.session,
+      lat: gps.lat,
+      lng: gps.lng,
+    );
+    if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
+      try {
+        await widget.sync.flush(pullTrips: false);
+      } catch (_) {}
+    }
     await _load();
   }
 

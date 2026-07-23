@@ -9,6 +9,10 @@ class VanSalePolicy {
 
   VanSalePrefs get _prefs => VanSalePrefs.instance;
 
+  /// Soften Online reachability checks — ping at most once per window.
+  static const _onlinePingTtl = Duration(seconds: 20);
+  DateTime? _lastOnlinePingOkAt;
+
   VanSaleWorkMode get workMode => _prefs.workMode;
 
   bool get allowNegativeStock => _prefs.allowNegativeStock;
@@ -28,6 +32,11 @@ class VanSalePolicy {
   bool get backgroundSyncDesired =>
       syncAllowed && _prefs.backgroundSync;
 
+  /// Clear cached Online reachability (e.g. after logout / site change).
+  void invalidateOnlineReachability() {
+    _lastOnlinePingOkAt = null;
+  }
+
   /// Gate mutations when work mode is Online.
   Future<void> assertCanMutate(VanSaleSession? session) async {
     if (workMode != VanSaleWorkMode.online) return;
@@ -37,6 +46,11 @@ class VanSalePolicy {
         'in Settings, or sign in.',
       );
     }
+    final lastOk = _lastOnlinePingOkAt;
+    if (lastOk != null &&
+        DateTime.now().difference(lastOk) < _onlinePingTtl) {
+      return;
+    }
     final ping = await testConnection(session);
     if (!ping.ok) {
       throw StateError(
@@ -44,5 +58,6 @@ class VanSalePolicy {
         'Check connection or switch work mode in Settings.',
       );
     }
+    _lastOnlinePingOkAt = DateTime.now();
   }
 }

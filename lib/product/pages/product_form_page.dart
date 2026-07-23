@@ -5,6 +5,7 @@ import '../../models/models.dart';
 import '../../services/prefs.dart';
 import '../../services/session.dart';
 import '../../services/sync_service.dart';
+import '../../services/van_sale_policy.dart';
 import '../models/product_model.dart';
 import '../repositories/product_repository.dart';
 import '../validation/product_validators.dart';
@@ -77,8 +78,11 @@ class _ProductFormPageState extends State<ProductFormPage> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final created = await productRepository.createLocal(_draft);
-      if (widget.session.connected) {
+      final created = await productRepository.createLocal(
+        _draft,
+        session: widget.session,
+      );
+      if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
         try {
           await widget.sync.flush(pullTrips: false);
         } catch (_) {}

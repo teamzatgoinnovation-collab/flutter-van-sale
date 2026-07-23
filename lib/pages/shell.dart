@@ -5,6 +5,7 @@ import '../product/pages/product_search_page.dart';
 import '../services/auth_scope.dart';
 import '../services/session.dart';
 import '../services/sync_service.dart';
+import '../services/van_sale_policy.dart';
 import 'collections_page.dart';
 import 'orders_page.dart';
 import 'settings_page.dart';
@@ -123,6 +124,15 @@ class _VanSaleShellState extends State<VanSaleShell> {
   }
 
   Future<void> _syncNow() async {
+    if (!VanSalePolicy.instance.syncAllowed) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sync disabled — Offline work mode. Switch in Settings.'),
+        ),
+      );
+      return;
+    }
     final result = await widget.sync.flush();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

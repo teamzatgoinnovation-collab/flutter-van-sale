@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../models/models.dart';
 import '../../services/session.dart';
 import '../../services/sync_service.dart';
+import '../../services/van_sale_policy.dart';
 import '../models/customer_model.dart';
 import '../repositories/customer_repository.dart';
 import '../validation/customer_validators.dart';
@@ -67,8 +68,11 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final created = await customerRepository.createLocal(_draft);
-      if (widget.session.connected) {
+      final created = await customerRepository.createLocal(
+        _draft,
+        session: widget.session,
+      );
+      if (VanSalePolicy.instance.shouldAttemptFlushAfterWrite) {
         try {
           await widget.sync.flush(pullTrips: false);
         } catch (_) {}

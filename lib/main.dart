@@ -71,7 +71,9 @@ class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _authed) {
+    if (state == AppLifecycleState.resumed &&
+        _authed &&
+        VanSalePolicy.instance.backgroundSyncDesired) {
       unawaited(() async {
         try {
           await _sync.flush(mode: SyncMode.background);

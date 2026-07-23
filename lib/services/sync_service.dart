@@ -52,6 +52,7 @@ class SyncService extends ChangeNotifier {
   /// Load persisted background sync + respect Offline work mode.
   void applyPrefs() {
     backgroundEnabled = VanSalePolicy.instance.backgroundSyncDesired;
+    notifyListeners();
   }
 
   Future<void> setBackgroundEnabled(bool value) async {

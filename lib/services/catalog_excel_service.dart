@@ -253,10 +253,10 @@ class CatalogExcelService {
         if (draft.city.isEmpty) draft.city = 'Riyadh';
         if (draft.country.isEmpty) draft.country = 'Saudi Arabia';
         if (existing == null) {
-          await customers.createLocal(draft);
+          await customers.createLocal(draft, session: session);
           created++;
         } else {
-          await customers.updateLocal(existing.id, draft);
+          await customers.updateLocal(existing.id, draft, session: session);
           updated++;
         }
       } catch (e) {
@@ -325,10 +325,10 @@ class CatalogExcelService {
           ..openingWarehouse = cell('opening_warehouse');
         draft.applyDefaults(products.defaults);
         if (existing == null) {
-          await products.createLocal(draft);
+          await products.createLocal(draft, session: session);
           created++;
         } else {
-          await products.updateLocal(existing.id, draft);
+          await products.updateLocal(existing.id, draft, session: session);
           updated++;
         }
       } catch (e) {

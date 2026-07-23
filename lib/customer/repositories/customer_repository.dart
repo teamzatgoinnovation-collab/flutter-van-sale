@@ -7,6 +7,7 @@ import '../../data/van_sale_db.dart';
 import '../../models/models.dart';
 import '../../services/prefs.dart';
 import '../../services/session.dart';
+import '../../services/van_sale_policy.dart';
 import '../mappers/customer_sync_mapper.dart';
 import '../models/customer_model.dart';
 import '../validation/customer_validators.dart';
@@ -237,7 +238,11 @@ class CustomerRepository {
   }
 
   /// Persist locally first and enqueue ERP sync (works offline).
-  Future<CustomerModel> createLocal(CustomerDraft draft) async {
+  Future<CustomerModel> createLocal(
+    CustomerDraft draft, {
+    VanSaleSession? session,
+  }) async {
+    await VanSalePolicy.instance.assertCanMutate(session);
     draft.applyDefaults(_defaults);
 
     final vat = CustomerValidators.normalizeVat(draft.taxId);
@@ -336,7 +341,12 @@ class CustomerRepository {
   }
 
   /// Update local customer and enqueue create (if never synced) or update.
-  Future<CustomerModel> updateLocal(String id, CustomerDraft draft) async {
+  Future<CustomerModel> updateLocal(
+    String id,
+    CustomerDraft draft, {
+    VanSaleSession? session,
+  }) async {
+    await VanSalePolicy.instance.assertCanMutate(session);
     final existing = await db.getCustomer(id);
     if (existing == null) {
       throw StateError('Customer $id not found');
@@ -440,7 +450,8 @@ class CustomerRepository {
   }
 
   /// Soft-delete on ERP (disable) once synced; otherwise drop local only.
-  Future<void> deleteLocal(String id) async {
+  Future<void> deleteLocal(String id, {VanSaleSession? session}) async {
+    await VanSalePolicy.instance.assertCanMutate(session);
     final existing = await db.getCustomer(id);
     if (existing == null) return;
 

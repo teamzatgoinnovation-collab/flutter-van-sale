@@ -6,6 +6,7 @@ import 'package:van_sale/models/models.dart';
 import 'package:van_sale/product/models/product_model.dart';
 import 'package:van_sale/product/repositories/product_repository.dart';
 import 'package:van_sale/product/validation/product_validators.dart';
+import 'package:van_sale/services/prefs.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,8 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    await VanSalePrefs.instance.resetForTest();
+    await VanSalePrefs.instance.setWorkMode(VanSaleWorkMode.onlineOffline);
     final db = await VanSaleDb.instance.database;
     await db.delete('sync_queue');
     await db.delete('product_favorites');

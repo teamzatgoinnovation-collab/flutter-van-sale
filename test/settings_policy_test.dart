@@ -123,6 +123,45 @@ void main() {
     expect(result.failed, 0);
   });
 
+  test('shouldAttemptFlushAfterWrite matrix for online/offline/hybrid', () async {
+    final prefs = VanSalePrefs.instance;
+    final policy = VanSalePolicy.instance;
+
+    await prefs.setWorkMode(VanSaleWorkMode.online);
+    await prefs.setAutoSyncAfterWrite(false);
+    expect(policy.syncAllowed, isTrue);
+    expect(policy.shouldAttemptFlushAfterWrite, isTrue);
+    expect(policy.backgroundSyncDesired, isTrue);
+
+    await prefs.setWorkMode(VanSaleWorkMode.offline);
+    await prefs.setAutoSyncAfterWrite(true);
+    await prefs.setBackgroundSync(true);
+    expect(policy.syncAllowed, isFalse);
+    expect(policy.shouldAttemptFlushAfterWrite, isFalse);
+    expect(policy.backgroundSyncDesired, isFalse);
+
+    await prefs.setWorkMode(VanSaleWorkMode.onlineOffline);
+    await prefs.setAutoSyncAfterWrite(false);
+    await prefs.setBackgroundSync(true);
+    expect(policy.syncAllowed, isTrue);
+    expect(policy.shouldAttemptFlushAfterWrite, isFalse);
+    expect(policy.backgroundSyncDesired, isTrue);
+
+    await prefs.setAutoSyncAfterWrite(true);
+    expect(policy.shouldAttemptFlushAfterWrite, isTrue);
+
+    await prefs.setBackgroundSync(false);
+    expect(policy.backgroundSyncDesired, isFalse);
+  });
+
+  test('offline and hybrid allow mutate without session', () async {
+    await VanSalePrefs.instance.setWorkMode(VanSaleWorkMode.offline);
+    await VanSalePolicy.instance.assertCanMutate(null);
+
+    await VanSalePrefs.instance.setWorkMode(VanSaleWorkMode.onlineOffline);
+    await VanSalePolicy.instance.assertCanMutate(null);
+  });
+
   testWidgets('SettingsPage shows work mode and negative stock', (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));

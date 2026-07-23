@@ -85,7 +85,11 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setWorkMode(_workMode);
     await prefs.setAllowNegativeStock(_allowNegativeStock);
     await prefs.setBackgroundSync(_backgroundSync);
-    await prefs.setAutoSyncAfterWrite(_autoSyncAfterWrite);
+    // Online always flushes after write — keep pref true for clarity.
+    await prefs.setAutoSyncAfterWrite(
+      _workMode == VanSaleWorkMode.online ? true : _autoSyncAfterWrite,
+    );
+    VanSalePolicy.instance.invalidateOnlineReachability();
     final threshold = double.tryParse(_lowStock.text.trim()) ?? 5;
     await prefs.setLowStockThreshold(threshold);
     ProductModel.setDefaultLowStockThreshold(prefs.lowStockThreshold);
@@ -444,12 +448,17 @@ class _SettingsPageState extends State<SettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Auto-sync after write'),
-            subtitle: const Text(
-              'Online mode always syncs after write. For Online+Offline, '
-              'enable this to flush the outbox after each sale.',
+            subtitle: Text(
+              _workMode == VanSaleWorkMode.online
+                  ? 'Always on in Online mode (required for live invoicing)'
+                  : _workMode == VanSaleWorkMode.offline
+                      ? 'Disabled while Offline work mode is selected'
+                      : 'Flush the outbox after each sale / cash / stock write',
             ),
-            value: _autoSyncAfterWrite,
-            onChanged: _workMode == VanSaleWorkMode.offline
+            value: _workMode == VanSaleWorkMode.online
+                ? true
+                : _autoSyncAfterWrite,
+            onChanged: _workMode != VanSaleWorkMode.onlineOffline
                 ? null
                 : (v) => setState(() => _autoSyncAfterWrite = v),
           ),

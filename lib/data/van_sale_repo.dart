@@ -258,11 +258,13 @@ class VanSaleRepo {
   Future<RouteStop?> updateVisit(
     String id,
     VisitStatus status, {
+    VanSaleSession? session,
     double? lat,
     double? lng,
     String? notes,
     String? noSaleReason,
   }) async {
+    await VanSalePolicy.instance.assertCanMutate(session);
     final stops = await db.listStops();
     final current = stops.where((s) => s.id == id).firstOrNull;
     if (current == null) return null;
@@ -420,7 +422,10 @@ class VanSaleRepo {
       ..addressLine1 = (addressLine1 ?? '').trim()
       ..city = (city ?? '').trim()
       ..country = (country ?? d.country).trim();
-    final created = await customerRepository.createLocal(draft);
+    final created = await customerRepository.createLocal(
+      draft,
+      session: session,
+    );
     if (session.connected) {
       // Flush is owned by SyncService callers; leave queued if offline.
     }
@@ -453,7 +458,10 @@ class VanSaleRepo {
     if (itemGroup != null && itemGroup.trim().isNotEmpty) {
       draft.itemGroup = itemGroup.trim();
     }
-    final created = await productRepository.createLocal(draft);
+    final created = await productRepository.createLocal(
+      draft,
+      session: session,
+    );
     return StockLine(
       itemCode: created.itemCode,
       itemName: created.itemName,
