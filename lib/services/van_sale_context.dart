@@ -4,6 +4,7 @@ class VanSaleProfile {
     required this.id,
     required this.user,
     required this.warehouse,
+    this.userType,
     this.vehicle,
     this.routeTitle,
     this.enabled = true,
@@ -12,6 +13,7 @@ class VanSaleProfile {
   final String id;
   final String user;
   final String warehouse;
+  final String? userType;
   final String? vehicle;
   final String? routeTitle;
   final bool enabled;
@@ -21,6 +23,7 @@ class VanSaleProfile {
       id: '${json['id'] ?? json['name'] ?? ''}',
       user: '${json['user'] ?? ''}',
       warehouse: '${json['warehouse'] ?? ''}',
+      userType: json['user_type'] == null ? null : '${json['user_type']}',
       vehicle: json['vehicle'] == null || '${json['vehicle']}'.isEmpty
           ? null
           : '${json['vehicle']}',
@@ -41,6 +44,7 @@ class VanSaleContext {
     required this.isAdmin,
     required this.isUser,
     required this.hasVansaleAccess,
+    this.userType,
     this.profile,
   });
 
@@ -50,6 +54,7 @@ class VanSaleContext {
   final bool isAdmin;
   final bool isUser;
   final bool hasVansaleAccess;
+  final String? userType;
   final VanSaleProfile? profile;
 
   factory VanSaleContext.fromJson(Map<String, dynamic> json) {
@@ -72,6 +77,7 @@ class VanSaleContext {
       isAdmin: json['is_admin'] == true,
       isUser: json['is_user'] == true,
       hasVansaleAccess: json['has_vansale_access'] == true,
+      userType: json['user_type'] == null ? null : '${json['user_type']}',
       profile: profile,
     );
   }
