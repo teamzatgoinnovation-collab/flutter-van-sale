@@ -4,7 +4,6 @@ import '../services/auth_scope.dart';
 import '../services/session.dart';
 import '../services/sync_service.dart';
 import '../services/van_sale_invoice_service.dart';
-import '../services/van_sale_policy.dart';
 import '../data/van_sale_repo.dart';
 import '../models/models.dart';
 import '../widgets/widgets.dart';
@@ -99,53 +98,43 @@ class _OrdersPageState extends State<OrdersPage> {
     try {
       final created = await Navigator.of(context, rootNavigator: true)
           .push<Object?>(
-        MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) => SellOrderPage(
-            session: _session,
-            sync: widget.sync,
-            initialCustomer: prefillCustomer,
-            tripId: tripId,
-          ),
-        ),
-      );
+            MaterialPageRoute(
+              fullscreenDialog: true,
+              builder: (_) => SellOrderPage(
+                session: _session,
+                sync: widget.sync,
+                initialCustomer: prefillCustomer,
+                tripId: tripId,
+              ),
+            ),
+          );
       if (created != null && mounted) {
         await _load();
         if (!mounted) return;
         final order = created is VanOrder
             ? created
             : (_orders.isEmpty ? null : _orders.first);
-        final erpName = order?.erpName;
+        if (order == null) return;
+        final erpName = order.erpName;
         final messenger = ScaffoldMessenger.of(context);
-        if (erpName != null &&
+        final synced = erpName != null &&
             erpName.isNotEmpty &&
-            order?.syncStatus == SyncStatus.uploaded) {
-          // Field sale: open tax invoice immediately so the salesman can print.
-          messenger.showSnackBar(
-            SnackBar(content: Text('Invoiced · $erpName · opening…')),
-          );
-          await VanSaleInvoiceService.openAfterSale(
-            context,
-            session: _session,
-            erpName: erpName,
-          );
-        } else {
-          final pending = order?.syncStatus == SyncStatus.failed ||
-              order?.syncStatus == SyncStatus.pending ||
-              order?.syncStatus == SyncStatus.retry;
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(
-                pending &&
-                        VanSalePolicy.instance.shouldAttemptFlushAfterWrite
-                    ? 'Sale saved · invoice pending sync — open Sync to retry'
-                    : VanSalePolicy.instance.shouldAttemptFlushAfterWrite
-                        ? 'Sale saved · sync queued'
-                        : 'Sale saved locally',
-              ),
+            order.syncStatus == SyncStatus.uploaded;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              synced
+                  ? 'Invoiced · $erpName · opening…'
+                  : 'Sale saved · opening offline receipt…',
             ),
-          );
-        }
+          ),
+        );
+        await VanSaleInvoiceService.openAfterSale(
+          context,
+          session: _session,
+          order: order,
+          erpName: erpName,
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -154,17 +143,28 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Future<void> _openInvoice(VanOrder order) async {
     final erp = order.erpName;
-    if (erp == null || erp.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invoice syncs after upload')),
+    if (erp != null &&
+        erp.isNotEmpty &&
+        order.syncStatus == SyncStatus.uploaded) {
+      await VanSaleInvoiceService.showActions(
+        context,
+        session: _session,
+        erpName: erp,
       );
       return;
     }
-    await VanSaleInvoiceService.showActions(
-      context,
-      session: _session,
-      erpName: erp,
-    );
+    // Offline / pending — print local provisional receipt.
+    try {
+      await VanSaleInvoiceService(_session).printLocalOrderReceipt(
+        order,
+        provisional: true,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Receipt: $e')),
+      );
+    }
   }
 
   String _whenLabel(DateTime dt) {
@@ -220,9 +220,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, i) {
                       final o = _orders[i];
-                      final canPrint =
-                          (o.erpName ?? '').isNotEmpty &&
-                          o.syncStatus == SyncStatus.uploaded;
+                      final canPrint = o.lines.isNotEmpty;
                       return Card(
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(

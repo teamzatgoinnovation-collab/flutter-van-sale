@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 
 import 'session.dart';
 import 'van_sale_api_methods.dart';
+import '../models/models.dart';
 
 /// Fetch and print/share VanSale tax invoices & local thermal receipts with ZATCA QR codes.
 class VanSaleInvoiceService {
@@ -56,6 +57,7 @@ class VanSaleInvoiceService {
     required double grandTotal,
     String sellerName = 'ZatGo Innovation',
     String vatNumber = '300000000000003',
+    bool provisional = false,
   }) async {
     final doc = pw.Document();
 
@@ -92,31 +94,66 @@ class VanSaleInvoiceService {
               ),
               pw.Center(
                 child: pw.Text(
-                  'SIMPLIFIED TAX INVOICE',
+                  provisional
+                      ? 'OFFLINE SALE RECEIPT'
+                      : 'SIMPLIFIED TAX INVOICE',
                   style: pw.TextStyle(
                     fontSize: 10,
                     fontWeight: pw.FontWeight.bold,
                   ),
                 ),
               ),
+              if (provisional)
+                pw.Center(
+                  child: pw.Text(
+                    'Provisional — final ERP invoice after sync',
+                    style: const pw.TextStyle(fontSize: 7),
+                  ),
+                ),
               pw.Divider(thickness: 0.5),
-              pw.Text('Order: #$orderId', style: const pw.TextStyle(fontSize: 9)),
-              pw.Text('Customer: $customerName', style: const pw.TextStyle(fontSize: 9)),
+              pw.Text(
+                provisional ? 'Local #: $orderId' : 'Order: #$orderId',
+                style: const pw.TextStyle(fontSize: 9),
+              ),
+              pw.Text(
+                'Customer: $customerName',
+                style: const pw.TextStyle(fontSize: 9),
+              ),
               pw.Text('Date: $dateStr', style: const pw.TextStyle(fontSize: 9)),
               pw.Divider(thickness: 0.5),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Item', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Qty x Price', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Total', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(
+                    'Item',
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Text(
+                    'Qty x Price',
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Text(
+                    'Total',
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
               pw.Divider(thickness: 0.5),
               ...items.map((it) {
                 final name = '${it['item_name'] ?? it['item_code'] ?? 'Item'}';
                 final qty = (it['qty'] as num?)?.toDouble() ?? 1.0;
-                final rate = (it['rate'] as num?)?.toDouble() ?? 0.0;
+                final rate = (it['rate'] as num?)?.toDouble() ??
+                    (it['unit_price'] as num?)?.toDouble() ??
+                    0.0;
                 final total = qty * rate;
                 return pw.Padding(
                   padding: const pw.EdgeInsets.symmetric(vertical: 2),
@@ -124,11 +161,20 @@ class VanSaleInvoiceService {
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Expanded(
-                        child: pw.Text(name, style: const pw.TextStyle(fontSize: 8)),
+                        child: pw.Text(
+                          name,
+                          style: const pw.TextStyle(fontSize: 8),
+                        ),
                       ),
-                      pw.Text('${qty.toStringAsFixed(0)} x ${rate.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 8)),
+                      pw.Text(
+                        '${qty.toStringAsFixed(0)} x ${rate.toStringAsFixed(2)}',
+                        style: const pw.TextStyle(fontSize: 8),
+                      ),
                       pw.SizedBox(width: 8),
-                      pw.Text(total.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8)),
+                      pw.Text(
+                        total.toStringAsFixed(2),
+                        style: const pw.TextStyle(fontSize: 8),
+                      ),
                     ],
                   ),
                 );
@@ -138,7 +184,10 @@ class VanSaleInvoiceService {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('Subtotal', style: const pw.TextStyle(fontSize: 9)),
-                  pw.Text(subtotal.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text(
+                    subtotal.toStringAsFixed(2),
+                    style: const pw.TextStyle(fontSize: 9),
+                  ),
                 ],
               ),
               if (discount > 0)
@@ -146,22 +195,40 @@ class VanSaleInvoiceService {
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text('Discount', style: const pw.TextStyle(fontSize: 9)),
-                    pw.Text('-${discount.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
+                    pw.Text(
+                      '-${discount.toStringAsFixed(2)}',
+                      style: const pw.TextStyle(fontSize: 9),
+                    ),
                   ],
                 ),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('VAT (15%)', style: const pw.TextStyle(fontSize: 9)),
-                  pw.Text(tax.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text(
+                    tax.toStringAsFixed(2),
+                    style: const pw.TextStyle(fontSize: 9),
+                  ),
                 ],
               ),
               pw.Divider(thickness: 0.5),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('GRAND TOTAL', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                  pw.Text(grandTotal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(
+                    'GRAND TOTAL',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Text(
+                    grandTotal.toStringAsFixed(2),
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
               pw.SizedBox(height: 10),
@@ -176,7 +243,9 @@ class VanSaleInvoiceService {
               pw.SizedBox(height: 4),
               pw.Center(
                 child: pw.Text(
-                  'ZATCA Compliant E-Invoice',
+                  provisional
+                      ? 'Will sync to ERPNext when online'
+                      : 'ZATCA Compliant E-Invoice',
                   style: const pw.TextStyle(fontSize: 7),
                 ),
               ),
@@ -206,7 +275,9 @@ class VanSaleInvoiceService {
           : 'HTTP ${result.status}';
       throw StateError('Invoice PDF failed ($hint)');
     }
-    final decoded = jsonDecode(result.bodyText.isEmpty ? '{}' : result.bodyText);
+    final decoded = jsonDecode(
+      result.bodyText.isEmpty ? '{}' : result.bodyText,
+    );
     final message = decoded is Map ? decoded['message'] : null;
     final payload = message is Map
         ? Map<String, dynamic>.from(message)
@@ -248,6 +319,7 @@ class VanSaleInvoiceService {
     required double discount,
     required double tax,
     required double grandTotal,
+    bool provisional = false,
   }) async {
     final bytes = await generateLocalThermalReceiptBytes(
       orderId: orderId,
@@ -258,11 +330,45 @@ class VanSaleInvoiceService {
       discount: discount,
       tax: tax,
       grandTotal: grandTotal,
+      provisional: provisional,
     );
     await Printing.layoutPdf(
       onLayout: (_) async => bytes,
-      name: 'Receipt_$orderId',
+      name: provisional ? 'Offline_$orderId' : 'Receipt_$orderId',
       format: PdfPageFormat.roll80,
+    );
+  }
+
+  /// Print a local provisional receipt from a [VanOrder] (works offline).
+  Future<void> printLocalOrderReceipt(
+    VanOrder order, {
+    bool provisional = true,
+  }) async {
+    final grand = order.amount;
+    // Treat line totals as tax-inclusive 15% for ZATCA QR fields.
+    final tax = grand - (grand / 1.15);
+    final subtotal = grand - tax;
+    final items = [
+      for (final l in order.lines)
+        {
+          'item_code': l.itemCode,
+          'item_name': l.itemName,
+          'qty': l.qty,
+          'unit_price': l.unitPrice,
+          'rate': l.unitPrice,
+        },
+    ];
+    await printThermalReceipt(
+      orderId: order.erpName?.trim().isNotEmpty == true
+          ? order.erpName!.trim()
+          : order.id,
+      customerName: order.customerName,
+      items: items,
+      subtotal: subtotal,
+      discount: 0,
+      tax: tax,
+      grandTotal: grand,
+      provisional: provisional,
     );
   }
 
@@ -284,9 +390,9 @@ class VanSaleInvoiceService {
   }) async {
     final name = erpName.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invoice not synced yet')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invoice not synced yet')));
       return;
     }
     final service = VanSaleInvoiceService(session);
@@ -313,9 +419,7 @@ class VanSaleInvoiceService {
     );
     if (choice == null || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Preparing invoice…')),
-    );
+    messenger.showSnackBar(const SnackBar(content: Text('Preparing invoice…')));
     try {
       if (choice == 'open') {
         await service.openPdf(name);
@@ -329,33 +433,55 @@ class VanSaleInvoiceService {
     }
   }
 
-  /// Right after a synced sale — open the tax invoice print UI immediately.
+  /// After a sale: ERP tax PDF when synced, otherwise local offline receipt.
   static Future<void> openAfterSale(
     BuildContext context, {
     required VanSaleSession session,
-    required String erpName,
+    VanOrder? order,
+    String? erpName,
   }) async {
-    final name = erpName.trim();
-    if (name.isEmpty || !context.mounted) return;
+    if (!context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
+    final service = VanSaleInvoiceService(session);
+    final name = (erpName ?? order?.erpName ?? '').trim();
+    final synced = name.isNotEmpty &&
+        (order == null || order.syncStatus == SyncStatus.uploaded);
+
     try {
-      await VanSaleInvoiceService(session).openPdf(name);
+      if (synced) {
+        await service.openPdf(name);
+      } else if (order != null) {
+        await service.printLocalOrderReceipt(order, provisional: true);
+      } else {
+        return;
+      }
       if (context.mounted) messenger.hideCurrentSnackBar();
     } catch (e) {
       if (!context.mounted) return;
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Invoice $name — tap to open'),
-          action: SnackBarAction(
-            label: 'Open',
-            onPressed: () {
-              showActions(context, session: session, erpName: name);
-            },
+      if (synced) {
+        // ERP PDF failed — still offer local print if we have the order.
+        if (order != null) {
+          try {
+            await service.printLocalOrderReceipt(order, provisional: true);
+            return;
+          } catch (_) {}
+        }
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Invoice $name — tap to open'),
+            action: SnackBarAction(
+              label: 'Open',
+              onPressed: () {
+                showActions(context, session: session, erpName: name);
+              },
+            ),
+            duration: const Duration(seconds: 8),
           ),
-          duration: const Duration(seconds: 8),
-        ),
-      );
+        );
+      } else {
+        messenger.showSnackBar(SnackBar(content: Text('Receipt: $e')));
+      }
     }
   }
 }
