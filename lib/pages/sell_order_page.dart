@@ -401,7 +401,7 @@ class _SellOrderPageState extends State<SellOrderPage> {
       if (_customer != null) {
         await customerRepository.markRecent(_customer!.id);
       }
-      await vanSaleRepo.createOrder(
+      final created = await vanSaleRepo.createOrder(
         customerName: customer,
         lines: lines,
         session: widget.sync.session,
@@ -414,7 +414,15 @@ class _SellOrderPageState extends State<SellOrderPage> {
         } catch (_) {}
       }
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      // Prefer post-flush row (erpName) when available.
+      VanOrder result = created;
+      try {
+        final refreshed = await vanSaleRepo.listOrders();
+        final match = refreshed.where((o) => o.id == created.id).firstOrNull;
+        if (match != null) result = match;
+      } catch (_) {}
+      if (!mounted) return;
+      Navigator.of(context).pop(result);
     } catch (e) {
       if (!mounted) return;
       setState(() {

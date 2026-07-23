@@ -55,12 +55,17 @@ class VanSaleRepo {
       for (final s in await db.listStops()) {
         existingStatuses[s.id] = s.visitStatus;
       }
+      final pendingVisitIds = await db.entityIdsWithOpenQueue('route_stop');
       await db.clearStops();
       for (var i = 0; i < rows.length; i++) {
         final map = Map<String, dynamic>.from(rows[i] as Map);
         final id = '${map['name'] ?? map['id'] ?? 'trip-$i'}';
         final statusRaw = '${map['status'] ?? ''}';
         final fromErp = _visitFromErp(statusRaw);
+        // Prefer local visit status while a visit update is still queued.
+        final visitStatus = pendingVisitIds.contains(id)
+            ? (existingStatuses[id] ?? VisitStatus.planned)
+            : (fromErp ?? existingStatuses[id] ?? VisitStatus.planned);
         await db.upsertStop(
           RouteStop(
             id: id,
@@ -73,7 +78,7 @@ class VanSaleRepo {
             plannedAt:
                 DateTime.tryParse('${map['planned_at'] ?? ''}') ??
                 DateTime.now(),
-            visitStatus: fromErp ?? existingStatuses[id] ?? VisitStatus.planned,
+            visitStatus: visitStatus,
           ),
         );
       }
@@ -89,7 +94,13 @@ class VanSaleRepo {
       final warehouse = VanSalePrefs.instance.warehouse.trim().isNotEmpty
           ? VanSalePrefs.instance.warehouse.trim()
           : profileWh;
-      if (warehouse.isNotEmpty) {
+      // Do not wipe optimistic local stock while order/adjust ops are open —
+      // that would restore ERP qty and allow double-selling.
+      final stockOpsOpen = await db.hasOpenQueueForEntityTypes(const [
+        'van_order',
+        'van_stock',
+      ]);
+      if (warehouse.isNotEmpty && !stockOpsOpen) {
         final stockEnv = await session.store.callMethod(
           ZatGoApiMethods.goVanStockList,
           args: {'warehouse': warehouse, 'page': 1, 'page_size': 200},

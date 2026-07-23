@@ -27,6 +27,7 @@ class VanSalePrefs {
   static const _kBackgroundSync = 'van_sale.background_sync';
   static const _kAutoSyncAfterWrite = 'van_sale.auto_sync_after_write';
   static const _kLowStockThreshold = 'van_sale.low_stock_threshold';
+  static const _kPreferUserMode = 'van_sale.prefer_user_mode';
 
   SharedPreferences? _prefs;
 
@@ -116,5 +117,12 @@ class VanSalePrefs {
   Future<void> setLowStockThreshold(double value) async {
     final v = value.isFinite && value >= 0 ? value : 5.0;
     await prefs.setDouble(_kLowStockThreshold, v);
+  }
+
+  /// Dual-role admins: prefer field "My van" shell over admin overview.
+  bool get preferUserMode => prefs.getBool(_kPreferUserMode) ?? false;
+
+  Future<void> setPreferUserMode(bool value) async {
+    await prefs.setBool(_kPreferUserMode, value);
   }
 }

@@ -265,12 +265,6 @@ class VanSaleInvoiceService {
               onTap: () => Navigator.pop(ctx, 'open'),
             ),
             ListTile(
-              leading: const Icon(Icons.print_outlined),
-              title: const Text('Thermal receipt (80mm)'),
-              subtitle: const Text('ZATCA e-invoice barcode receipt'),
-              onTap: () => Navigator.pop(ctx, 'thermal'),
-            ),
-            ListTile(
               leading: const Icon(Icons.share_outlined),
               title: const Text('Share PDF'),
               onTap: () => Navigator.pop(ctx, 'share'),
@@ -287,16 +281,6 @@ class VanSaleInvoiceService {
     try {
       if (choice == 'open') {
         await service.openPdf(erpName);
-      } else if (choice == 'thermal') {
-        await service.printThermalReceipt(
-          orderId: erpName,
-          customerName: 'Customer',
-          items: [],
-          subtotal: 0,
-          discount: 0,
-          tax: 0,
-          grandTotal: 0,
-        );
       } else {
         await service.sharePdf(erpName);
       }

@@ -39,6 +39,9 @@ class SyncService extends ChangeNotifier {
   bool _running = false;
   bool get isRunning => _running;
 
+  /// In-flight flush so concurrent callers await the same result (no stale counts).
+  Future<SyncFlushResult>? _inFlight;
+
   int progressCurrent = 0;
   int progressTotal = 0;
   String progressLabel = '';
@@ -101,11 +104,36 @@ class SyncService extends ChangeNotifier {
     if (!session.connected) {
       return const SyncFlushResult();
     }
-    if (_running) {
-      return lastResult ?? const SyncFlushResult();
+    final existing = _inFlight;
+    if (existing != null) {
+      return existing;
     }
 
     final quietPull = mode == SyncMode.background;
+    final future = _runFlush(
+      pullTrips: pullTrips,
+      quietPull: quietPull,
+      useBatch: useBatch,
+      continueOnFailure: continueOnFailure,
+      mode: mode,
+    );
+    _inFlight = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_inFlight, future)) {
+        _inFlight = null;
+      }
+    }
+  }
+
+  Future<SyncFlushResult> _runFlush({
+    required bool pullTrips,
+    required bool quietPull,
+    required bool useBatch,
+    required int continueOnFailure,
+    required SyncMode mode,
+  }) async {
     _running = true;
     progressCurrent = 0;
     progressTotal = 0;
@@ -142,10 +170,14 @@ class SyncService extends ChangeNotifier {
 
       if (useBatch) {
         final master = pending
-            .where((e) => e.entityType == 'customer' || e.entityType == 'product')
+            .where(
+              (e) => e.entityType == 'customer' || e.entityType == 'product',
+            )
             .toList();
         final other = pending
-            .where((e) => e.entityType != 'customer' && e.entityType != 'product')
+            .where(
+              (e) => e.entityType != 'customer' && e.entityType != 'product',
+            )
             .toList();
 
         for (var i = 0; i < master.length; i += 20) {
@@ -154,7 +186,8 @@ class SyncService extends ChangeNotifier {
           uploaded += batchResult.uploaded;
           failed += batchResult.failed;
           conflicts += batchResult.conflicts;
-          progressCurrent = (progressCurrent + chunk.length).clamp(0, progressTotal);
+          progressCurrent =
+              (progressCurrent + chunk.length).clamp(0, progressTotal);
           if (showUi) {
             progressLabel = 'Batch $progressCurrent/$progressTotal';
             notifyListeners();
@@ -166,7 +199,10 @@ class SyncService extends ChangeNotifier {
             progressLabel = '${item.entityType} ${item.op}';
             notifyListeners();
           }
-          final ok = await _flushOne(item, continueOnFailure: continueOnFailure == 1);
+          final ok = await _flushOne(
+            item,
+            continueOnFailure: continueOnFailure == 1,
+          );
           if (ok == _FlushOutcome.uploaded) uploaded++;
           if (ok == _FlushOutcome.failed) failed++;
           if (ok == _FlushOutcome.conflict) conflicts++;
@@ -272,13 +308,28 @@ class SyncService extends ChangeNotifier {
       for (final raw in results) {
         if (raw is! Map) continue;
         final id = '${raw['id']}';
-        final item = items.firstWhere(
-          (e) => e.id == id,
-          orElse: () => items.first,
-        );
+        SyncQueueItem? matched;
+        for (final e in items) {
+          if (e.id == id) {
+            matched = e;
+            break;
+          }
+        }
+        if (matched == null) {
+          await db.addSyncLog(
+            level: 'warn',
+            message: 'Batch result id unmatched: $id',
+            queueId: id.isEmpty ? null : id,
+          );
+          continue;
+        }
+        final item = matched;
         if (raw['conflict'] == true) {
           conflicts++;
-          await db.markQueueConflict(id, '${raw['meta']?['message'] ?? 'Conflict'}');
+          await db.markQueueConflict(
+            id,
+            '${raw['meta']?['message'] ?? 'Conflict'}',
+          );
           await _markEntityStatus(item, SyncStatus.conflict, error: 'Conflict');
           await db.addSyncLog(
             level: 'warn',
@@ -290,15 +341,31 @@ class SyncService extends ChangeNotifier {
           continue;
         }
         if (raw['success'] == true) {
+          final erpName = _extractErpName(item, raw['data']);
+          if (erpName == null || erpName.isEmpty) {
+            failed++;
+            const err = 'Server ack missing name';
+            await db.markQueueFailed(id, err);
+            await _markEntityStatus(item, SyncStatus.failed, error: err);
+            await db.addSyncLog(
+              level: 'error',
+              message: err,
+              entityType: item.entityType,
+              entityId: item.entityId,
+              queueId: id,
+            );
+            continue;
+          }
           uploaded++;
-          final erpName = _extractErpName(item, raw['data']) ?? item.entityId;
           final modified = raw['data'] is Map
               ? '${(raw['data'] as Map)['modified'] ?? ''}'
               : null;
           await _markEntitySynced(
             item,
             erpName,
-            erpModified: (modified == null || modified.isEmpty) ? null : modified,
+            erpModified: (modified == null || modified.isEmpty)
+                ? null
+                : modified,
           );
           await db.markQueueDone(id);
           await db.addSyncLog(

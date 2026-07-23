@@ -153,11 +153,8 @@ class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
             session: widget.session,
             accessMessage: _accessBlock,
             onAuthed: () {
-              setState(() {
-                _showLogin = false;
-                _accessBlock = null;
-              });
-              _afterAuth();
+              // Session already notified; _syncGate flips to shell and runs _afterAuth once.
+              setState(() => _accessBlock = null);
             },
           )
         : widget.session.showAdminShell

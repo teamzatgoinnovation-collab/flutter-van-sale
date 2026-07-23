@@ -240,6 +240,7 @@ class AdminFilterBar extends StatelessWidget {
           SizedBox(
             width: 180,
             child: DropdownButtonFormField<String?>(
+              key: ValueKey('admin-user-${filters.salesUser}'),
               initialValue: filters.salesUser,
               isExpanded: true,
               decoration: const InputDecoration(
@@ -266,6 +267,9 @@ class AdminFilterBar extends StatelessWidget {
           SizedBox(
             width: 160,
             child: DropdownButtonFormField<String?>(
+              key: ValueKey(
+                'admin-route-${filters.salesUser}-${filters.routeTitle}',
+              ),
               initialValue: filters.routeTitle,
               isExpanded: true,
               decoration: const InputDecoration(
@@ -286,6 +290,9 @@ class AdminFilterBar extends StatelessWidget {
           SizedBox(
             width: 160,
             child: DropdownButtonFormField<String?>(
+              key: ValueKey(
+                'admin-vehicle-${filters.salesUser}-${filters.vehicle}',
+              ),
               initialValue: filters.vehicle,
               isExpanded: true,
               decoration: const InputDecoration(

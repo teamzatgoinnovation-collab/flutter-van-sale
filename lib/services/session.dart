@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
 
+import 'prefs.dart';
 import 'van_sale_api_methods.dart';
 import 'van_sale_context.dart';
 
@@ -36,6 +39,14 @@ class VanSaleSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  void restorePreferUserModeFromPrefs() {
+    try {
+      preferUserMode = VanSalePrefs.instance.preferUserMode;
+    } catch (_) {
+      // Prefs may be uninitialized in unit tests.
+    }
+  }
+
   Future<ErpnextLoginResult> login({
     required String usr,
     required String pwd,
@@ -51,6 +62,7 @@ class VanSaleSession extends ChangeNotifier {
       } catch (e) {
         lastError = 'Could not load VanSale roles: $e';
       }
+      restorePreferUserModeFromPrefs();
     } else if (result is ErpnextLoginFail) {
       user = null;
       fullName = null;
@@ -75,11 +87,18 @@ class VanSaleSession extends ChangeNotifier {
     } else {
       context = null;
     }
+    restorePreferUserModeFromPrefs();
     notifyListeners();
   }
 
   void setPreferUserMode(bool value) {
     preferUserMode = value;
+    try {
+      VanSalePrefs.instance.prefs; // ensure init'd before async write
+      unawaited(VanSalePrefs.instance.setPreferUserMode(value));
+    } catch (_) {
+      // Prefs may be uninitialized in unit tests.
+    }
     notifyListeners();
   }
 

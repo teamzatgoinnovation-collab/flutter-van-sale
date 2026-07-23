@@ -115,7 +115,7 @@ class _AdminOverviewPageState extends State<AdminOverviewPage> {
                           physics: const NeverScrollableScrollPhysics(),
                           mainAxisSpacing: 10,
                           crossAxisSpacing: 10,
-                          childAspectRatio: 1.15,
+                          childAspectRatio: 1.25,
                           children: [
                             KpiCard(
                               title: 'Stops done',

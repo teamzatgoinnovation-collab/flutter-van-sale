@@ -1509,7 +1509,24 @@ LIMIT 1
   }) async {
     final db = executor ?? await database;
     // Stable primary key for (entity, op) so create is idempotent / visit replaceable.
-    final id = 'sq_${entityType}_${entityId}_$op';
+    var id = 'sq_${entityType}_${entityId}_$op';
+    // Never replace an in-flight row — a successful flush would delete the
+    // newer args that replaced it mid-upload.
+    if (conflict == ConflictAlgorithm.replace) {
+      final existing = await db.query(
+        'sync_queue',
+        columns: ['status'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (existing.isNotEmpty &&
+          '${existing.first['status']}' == 'uploading') {
+        id =
+            'sq_${entityType}_${entityId}_${op}_${DateTime.now().millisecondsSinceEpoch}';
+        conflict = ConflictAlgorithm.abort;
+      }
+    }
     await db.insert('sync_queue', {
       'id': id,
       'client_id': clientId,
@@ -1579,6 +1596,36 @@ LIMIT 1
   Future<void> markQueueDone(String id) async {
     final db = await database;
     await db.delete('sync_queue', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Entity ids that still have open sync_queue rows (any non-terminal status).
+  Future<Set<String>> entityIdsWithOpenQueue(String entityType) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      '''
+SELECT DISTINCT entity_id FROM sync_queue
+WHERE entity_type = ?
+  AND status IN ('pending', 'retry', 'queued', 'failed', 'uploading', 'conflict')
+''',
+      [entityType],
+    );
+    return {for (final r in rows) '${r['entity_id']}'};
+  }
+
+  Future<bool> hasOpenQueueForEntityTypes(List<String> entityTypes) async {
+    if (entityTypes.isEmpty) return false;
+    final db = await database;
+    final placeholders = List.filled(entityTypes.length, '?').join(',');
+    final rows = await db.rawQuery(
+      '''
+SELECT 1 FROM sync_queue
+WHERE entity_type IN ($placeholders)
+  AND status IN ('pending', 'retry', 'queued', 'failed', 'uploading', 'conflict')
+LIMIT 1
+''',
+      entityTypes,
+    );
+    return rows.isNotEmpty;
   }
 
   Future<void> markQueueAwaitingErp(String id, {String? error}) async {

@@ -86,7 +86,8 @@ class _OrdersPageState extends State<OrdersPage> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      final ok = await Navigator.of(context, rootNavigator: true).push<bool>(
+      final created = await Navigator.of(context, rootNavigator: true)
+          .push<Object?>(
         MaterialPageRoute(
           fullscreenDialog: true,
           builder: (_) => SellOrderPage(
@@ -97,15 +98,17 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
         ),
       );
-      if (ok == true && mounted) {
+      if (created != null && mounted) {
         await _load();
         if (!mounted) return;
-        final latest = _orders.isEmpty ? null : _orders.first;
-        final erpName = latest?.erpName;
+        final order = created is VanOrder
+            ? created
+            : (_orders.isEmpty ? null : _orders.first);
+        final erpName = order?.erpName;
         final messenger = ScaffoldMessenger.of(context);
         if (erpName != null &&
             erpName.isNotEmpty &&
-            latest?.syncStatus == SyncStatus.uploaded) {
+            order?.syncStatus == SyncStatus.uploaded) {
           messenger.showSnackBar(
             SnackBar(
               content: Text('Invoiced · $erpName'),
