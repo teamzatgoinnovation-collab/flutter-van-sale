@@ -194,17 +194,40 @@ class VanSaleInvoiceService {
     if (name.isEmpty) {
       throw StateError('Invoice name missing');
     }
-    final env = await session.store.callMethod(
-      VanSaleApiMethods.ordersPdf,
-      args: {'name': name},
+    // Prefer GET (query args) so Android never hits CSRF / Expect→417/407 on POST.
+    final q = Uri(queryParameters: {'name': name}).query;
+    final result = await session.store.request(
+      path: '/api/method/${VanSaleApiMethods.ordersPdf}?$q',
+      method: 'GET',
     );
-    final data = env.data;
+    if (!result.ok) {
+      final hint = result.status == 417 || result.status == 407
+          ? 'Session expired or request blocked — sign in again'
+          : 'HTTP ${result.status}';
+      throw StateError('Invoice PDF failed ($hint)');
+    }
+    final decoded = jsonDecode(result.bodyText.isEmpty ? '{}' : result.bodyText);
+    final message = decoded is Map ? decoded['message'] : null;
+    final payload = message is Map
+        ? Map<String, dynamic>.from(message)
+        : (decoded is Map ? Map<String, dynamic>.from(decoded) : null);
+    if (payload == null) {
+      throw StateError('Invoice PDF response missing data');
+    }
+    if (payload['success'] == false || payload['ok'] == false) {
+      final err = payload['error'];
+      final msg = err is Map
+          ? '${err['message'] ?? err}'
+          : '${err ?? payload['exception'] ?? 'Request failed'}';
+      throw StateError(msg);
+    }
+    final data = payload['data'];
     if (data is! Map) {
       throw StateError('Invoice PDF response missing data');
     }
     final b64 = '${data['pdf_base64'] ?? ''}';
     if (b64.isEmpty) {
-      throw StateError('Invoice PDF empty');
+      throw StateError('Invoice PDF empty — is the Sales Invoice submitted?');
     }
     return Uint8List.fromList(base64Decode(b64));
   }
