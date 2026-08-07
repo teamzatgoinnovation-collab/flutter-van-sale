@@ -18,7 +18,6 @@ class VanSalePrefs {
   VanSalePrefs._();
   static final VanSalePrefs instance = VanSalePrefs._();
 
-  static const _kSiteUrl = 'van_sale.site_url';
   static const _kWarehouse = 'van_sale.warehouse';
   static const _kSourceWarehouse = 'van_sale.source_warehouse';
   static const _kCompany = 'van_sale.company';
@@ -47,13 +46,6 @@ class VanSalePrefs {
       throw StateError('VanSalePrefs.init() required');
     }
     return p;
-  }
-
-  String get siteUrl =>
-      prefs.getString(_kSiteUrl) ?? 'https://demo.zatgo.online';
-
-  Future<void> setSiteUrl(String value) async {
-    await prefs.setString(_kSiteUrl, value.replaceAll(RegExp(r'/$'), ''));
   }
 
   String get warehouse => prefs.getString(_kWarehouse) ?? '';

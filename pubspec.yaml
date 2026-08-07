@@ -29,7 +29,7 @@ dependencies:
   shared_preferences: ^2.5.3
   image_picker: ^1.1.2
   zatgo_dart_sdk:
-    path: ../../../SharedSDK/dart_sdk
+    path: ../../SharedSDK/dart_sdk
 
 dev_dependencies:
   flutter_test:

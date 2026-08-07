@@ -8,19 +8,24 @@ import 'van_sale_api_methods.dart';
 import 'van_sale_context.dart';
 import 'van_sale_policy.dart';
 
+/// Fixed ERPNext server for this app build. Overridable only via
+/// --dart-define for internal dev/testing builds (e.g. pointing at a local
+/// bench) — not user-editable in the app itself.
+const String kErpBaseUrl = 'https://vansale.zatgo.online';
+
 /// Password-session state for VanSale (user + admin).
 class VanSaleSession extends ChangeNotifier {
   VanSaleSession() {
     final base = const String.fromEnvironment(
       'FRAPPE_BASE_URL',
-      defaultValue: 'https://demo.zatgo.online',
+      defaultValue: kErpBaseUrl,
     );
     baseUrl = base.replaceAll(RegExp(r'/$'), '');
   }
 
   final ErpnextSessionStore store = ErpnextSessionStore();
 
-  String baseUrl = 'https://demo.zatgo.online';
+  String baseUrl = kErpBaseUrl;
   String? user;
   String? fullName;
   String? lastError;
@@ -35,11 +40,6 @@ class VanSaleSession extends ChangeNotifier {
   bool get showAdminShell =>
       isAdmin && !(preferUserMode && isFieldUser);
 
-  void updateBaseUrl(String value) {
-    baseUrl = value.replaceAll(RegExp(r'/$'), '');
-    notifyListeners();
-  }
-
   void restorePreferUserModeFromPrefs() {
     try {
       preferUserMode = VanSalePrefs.instance.preferUserMode;
@@ -52,7 +52,14 @@ class VanSaleSession extends ChangeNotifier {
     required String usr,
     required String pwd,
   }) async {
-    final result = await store.login(baseUrl: baseUrl, usr: usr, pwd: pwd);
+    final result = await store.login(
+      baseUrl: baseUrl,
+      usr: usr,
+      pwd: pwd,
+      hostHeader: const String.fromEnvironment('FRAPPE_HOST_HEADER').isEmpty
+          ? null
+          : const String.fromEnvironment('FRAPPE_HOST_HEADER'),
+    );
     if (result is ErpnextLoginOk) {
       user = result.session.user;
       fullName = result.session.fullName;

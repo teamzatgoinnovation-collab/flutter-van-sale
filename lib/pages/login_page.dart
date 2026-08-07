@@ -3,7 +3,6 @@ import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
 
 import '../services/prefs.dart';
 import '../services/session.dart';
-import 'site_url_settings_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -34,14 +33,6 @@ class _LoginPageState extends State<LoginPage>
   @override
   void initState() {
     super.initState();
-    // updateBaseUrl calls notifyListeners() which triggers setState() on
-    // VanSaleApp. Calling it directly in initState() fires during the build
-    // phase and causes the "setState() called during build" assertion.
-    // Defer to after the first frame so the tree is fully mounted.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      widget.session.updateBaseUrl(VanSalePrefs.instance.siteUrl);
-    });
     _enter = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 480),
@@ -62,23 +53,8 @@ class _LoginPageState extends State<LoginPage>
     super.dispose();
   }
 
-  Future<void> _openSiteUrlSettings() async {
-    await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => SiteUrlSettingsPage(session: widget.session),
-      ),
-    );
-    if (!mounted) return;
-    // Reflect any URL change in the session for the next sign-in.
-    widget.session.updateBaseUrl(VanSalePrefs.instance.siteUrl);
-    setState(() {});
-  }
-
   Future<void> _login() async {
     setState(() => _busy = true);
-    final url = VanSalePrefs.instance.siteUrl.trim();
-    widget.session.updateBaseUrl(url);
     final result = await widget.session.login(
       usr: _usr.text.trim(),
       pwd: _pwd.text,
@@ -118,7 +94,6 @@ class _LoginPageState extends State<LoginPage>
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final siteUrl = VanSalePrefs.instance.siteUrl;
 
     return Scaffold(
       body: DecoratedBox(
@@ -209,27 +184,6 @@ class _LoginPageState extends State<LoginPage>
                           ),
                         ),
                       ],
-                      const SizedBox(height: 10),
-                      InkWell(
-                        onTap: _busy ? null : _openSiteUrlSettings,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          child: Text(
-                            siteUrl,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
                       const SizedBox(height: 20),
                       DecoratedBox(
                         decoration: BoxDecoration(

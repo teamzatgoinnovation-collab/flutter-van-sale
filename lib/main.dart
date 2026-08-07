@@ -52,7 +52,6 @@ class _VanSaleBootstrapState extends State<_VanSaleBootstrap> {
         VanSaleServices.bootstrap(),
       ]);
       final session = VanSaleSession();
-      session.updateBaseUrl(VanSalePrefs.instance.siteUrl);
       if (!mounted) return;
       setState(() => _session = session);
     } catch (e, st) {

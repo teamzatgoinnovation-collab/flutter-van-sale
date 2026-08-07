@@ -25,7 +25,6 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  late final TextEditingController _url;
   late final TextEditingController _warehouse;
   late final TextEditingController _sourceWarehouse;
   late final TextEditingController _company;
@@ -40,7 +39,6 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     final prefs = VanSalePrefs.instance;
-    _url = TextEditingController(text: prefs.siteUrl);
     final profileWh = widget.session.context?.profile?.warehouse.trim() ?? '';
     final warehouse = prefs.warehouse.trim().isNotEmpty
         ? prefs.warehouse
@@ -63,7 +61,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
-    _url.dispose();
     _warehouse.dispose();
     _sourceWarehouse.dispose();
     _company.dispose();
@@ -74,11 +71,6 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _save() async {
     setState(() => _busy = true);
     final prefs = VanSalePrefs.instance;
-    final previousUrl = prefs.siteUrl;
-    final nextUrl = _url.text.trim().replaceAll(RegExp(r'/$'), '');
-    final siteChanged = nextUrl.isNotEmpty && nextUrl != previousUrl;
-
-    await prefs.setSiteUrl(nextUrl.isEmpty ? previousUrl : nextUrl);
     await prefs.setWarehouse(_warehouse.text.trim());
     await prefs.setSourceWarehouse(_sourceWarehouse.text.trim());
     await prefs.setCompany(_company.text.trim());
@@ -94,25 +86,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setLowStockThreshold(threshold);
     ProductModel.setDefaultLowStockThreshold(prefs.lowStockThreshold);
 
-    widget.session.updateBaseUrl(prefs.siteUrl);
     widget.sync.applyPrefs();
-
-    if (siteChanged) {
-      widget.sync.stopBackgroundSync();
-      if (!mounted) return;
-      final messenger = ScaffoldMessenger.of(context);
-      final nav = Navigator.of(context);
-      await widget.session.logout();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Site updated to ${prefs.siteUrl}. Sign in again for the new site.',
-          ),
-        ),
-      );
-      nav.popUntil((route) => route.isFirst);
-      return;
-    }
 
     if (VanSalePolicy.instance.backgroundSyncDesired &&
         widget.session.connected) {
@@ -130,7 +104,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _ping() async {
     setState(() => _busy = true);
-    widget.session.updateBaseUrl(_url.text.trim());
     final result = await testConnection(widget.session);
     if (!mounted) return;
     if (result.ok &&
@@ -301,19 +274,13 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           _sectionTitle(context, 'Connection'),
-          TextField(
-            controller: _url,
-            decoration: const InputDecoration(
-              labelText: 'Site URL',
-              hintText: 'https://erp.zatgo.online',
-              prefixIcon: Icon(Icons.link),
-              helperText:
-                  'Changing the site signs you out so you can log in fresh',
-            ),
-            keyboardType: TextInputType.url,
-            autocorrect: false,
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.link),
+            title: const Text('Server'),
+            subtitle: Text(session.baseUrl),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
           OutlinedButton(
             onPressed: _busy ? null : _ping,
             child: const Text('Test site'),
