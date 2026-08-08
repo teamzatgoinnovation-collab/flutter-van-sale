@@ -110,21 +110,7 @@ class _LoginPageState extends State<LoginPage>
     return Scaffold(
       body: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [
-                    kScaffoldDark,
-                    scheme.primary.withValues(alpha: 0.22),
-                    kScaffoldDark,
-                  ]
-                : [
-                    kScaffoldLight,
-                    scheme.primary.withValues(alpha: 0.12),
-                    kScaffoldLight,
-                  ],
-          ),
+          color: isDark ? kScaffoldDark : kScaffoldLight,
         ),
         child: SafeArea(
           child: Center(

@@ -42,14 +42,6 @@ class KpiCard extends StatelessWidget {
                     color: scheme.outlineVariant.withValues(alpha: 0.3),
                   )
                 : null,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                scheme.surface,
-                primaryAccent.withValues(alpha: isDark ? 0.08 : 0.04),
-              ],
-            ),
             boxShadow: [
               BoxShadow(
                 color: primaryAccent.withValues(alpha: isDark ? 0.1 : 0.12),
