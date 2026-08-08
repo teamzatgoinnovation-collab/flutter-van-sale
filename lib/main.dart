@@ -250,13 +250,16 @@ class _VanSaleAppState extends State<VanSaleApp> with WidgetsBindingObserver {
             onRequireLogin: () => setState(() => _showLogin = true),
           );
 
-    return MaterialApp(
-      title: 'VanSale',
-      debugShowCheckedModeBanner: false,
-      theme: vanSaleLightTheme(),
-      darkTheme: vanSaleDarkTheme(),
-      themeMode: ThemeMode.system,
-      home: home,
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: VanSalePrefs.instance.themeModeNotifier,
+      builder: (context, mode, _) => MaterialApp(
+        title: 'VanSale',
+        debugShowCheckedModeBanner: false,
+        theme: vanSaleLightTheme(),
+        darkTheme: vanSaleDarkTheme(),
+        themeMode: mode,
+        home: home,
+      ),
     );
   }
 }

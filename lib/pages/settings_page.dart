@@ -273,6 +273,24 @@ class _SettingsPageState extends State<SettingsPage> {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
+          _sectionTitle(context, 'Appearance'),
+          SegmentedButton<ThemeMode>(
+            segments: const [
+              ButtonSegment(
+                value: ThemeMode.light,
+                label: Text('Light'),
+                icon: Icon(Icons.light_mode_outlined, size: 18),
+              ),
+              ButtonSegment(
+                value: ThemeMode.dark,
+                label: Text('Dark'),
+                icon: Icon(Icons.dark_mode_outlined, size: 18),
+              ),
+            ],
+            selected: {VanSalePrefs.instance.themeMode},
+            onSelectionChanged: (s) =>
+                setState(() => VanSalePrefs.instance.setThemeMode(s.first)),
+          ),
           _sectionTitle(context, 'Connection'),
           ListTile(
             contentPadding: EdgeInsets.zero,

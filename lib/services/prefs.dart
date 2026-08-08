@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,6 +23,7 @@ class VanSalePrefs {
   static const _kSourceWarehouse = 'van_sale.source_warehouse';
   static const _kCompany = 'van_sale.company';
   static const _kWorkMode = 'van_sale.work_mode';
+  static const _kThemeMode = 'van_sale.theme_mode';
   static const _kAllowNegativeStock = 'van_sale.allow_negative_stock';
   static const _kBackgroundSync = 'van_sale.background_sync';
   static const _kAutoSyncAfterWrite = 'van_sale.auto_sync_after_write';
@@ -30,8 +32,25 @@ class VanSalePrefs {
 
   SharedPreferences? _prefs;
 
+  /// Reactive so the top-level MaterialApp can rebuild when Settings
+  /// changes this — default is light, per product decision (no
+  /// system-follows-device mode).
+  final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(
+    ThemeMode.light,
+  );
+
   Future<void> init() async {
     _prefs ??= await SharedPreferences.getInstance();
+    themeModeNotifier.value = _prefs!.getString(_kThemeMode) == 'dark'
+        ? ThemeMode.dark
+        : ThemeMode.light;
+  }
+
+  ThemeMode get themeMode => themeModeNotifier.value;
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    themeModeNotifier.value = mode;
+    await prefs.setString(_kThemeMode, mode == ThemeMode.dark ? 'dark' : 'light');
   }
 
   /// Tests only — rebind SharedPreferences after setMockInitialValues.
