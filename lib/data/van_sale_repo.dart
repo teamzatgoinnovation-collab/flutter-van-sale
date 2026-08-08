@@ -168,6 +168,26 @@ class VanSaleRepo {
       syncStatus: SyncStatus.pending,
     );
 
+    // Online mode: check ERPNext directly rather than only trusting
+    // whatever's already in the local cache — an item that's valid on the
+    // server but hasn't been pulled locally yet shouldn't be rejected.
+    // Offline mode is untouched: no connectivity to fall back on anyway,
+    // so it keeps relying purely on the local cache as before.
+    if (VanSalePolicy.instance.workMode == VanSaleWorkMode.online &&
+        session != null &&
+        session.connected) {
+      var hasMissing = false;
+      for (final line in lines) {
+        if (await db.getStock(line.itemCode) == null) {
+          hasMissing = true;
+          break;
+        }
+      }
+      if (hasMissing) {
+        await refreshFromErpnext(session);
+      }
+    }
+
     final database = await db.database;
     await database.transaction((txn) async {
       for (final line in lines) {
