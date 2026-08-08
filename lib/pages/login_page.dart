@@ -4,6 +4,7 @@ import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
 import '../services/hub_client.dart';
 import '../services/prefs.dart';
 import '../services/session.dart';
+import '../theme.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -114,14 +115,14 @@ class _LoginPageState extends State<LoginPage>
             end: Alignment.bottomRight,
             colors: isDark
                 ? [
-                    const Color(0xFF0F172A),
+                    kScaffoldDark,
                     scheme.primary.withValues(alpha: 0.22),
-                    const Color(0xFF0F172A),
+                    kScaffoldDark,
                   ]
                 : [
-                    const Color(0xFFF0FDFA),
+                    kScaffoldLight,
                     scheme.primary.withValues(alpha: 0.12),
-                    const Color(0xFFF8FAFC),
+                    kScaffoldLight,
                   ],
           ),
         ),

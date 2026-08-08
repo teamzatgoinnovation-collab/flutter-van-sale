@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../services/aging_service.dart';
 import '../services/sync_service.dart';
 import '../services/van_sale_policy.dart';
+import '../theme.dart';
 import '../widgets/aging_summary_card.dart';
 import '../widgets/widgets.dart';
 import 'aging_page.dart';
@@ -195,7 +196,7 @@ class _TodayPageState extends State<TodayPage> {
                       title: 'Stops done',
                       value: '${summary.stopsDone}/${summary.stopsTotal}',
                       icon: Icons.route_outlined,
-                      accentColor: const Color(0xFF0F4C5C),
+                      accentColor: kBrandTeal,
                       subtitle: summary.stopsTotal > 0
                           ? '${((summary.stopsDone / summary.stopsTotal) * 100).toInt()}% completed'
                           : null,
@@ -204,19 +205,19 @@ class _TodayPageState extends State<TodayPage> {
                       title: 'Orders open',
                       value: '${summary.ordersQueued}',
                       icon: Icons.outbox_outlined,
-                      accentColor: const Color(0xFFE36414),
+                      accentColor: kBrandOrange,
                     ),
                     KpiCard(
                       title: 'Collections today',
                       value: money(summary.collectionsToday),
                       icon: Icons.payments_outlined,
-                      accentColor: const Color(0xFF2A9D8F),
+                      accentColor: kBrandTealLight,
                     ),
                     KpiCard(
                       title: 'Van SKUs in stock',
                       value: '${summary.vanStockSku}',
                       icon: Icons.inventory_2_outlined,
-                      accentColor: Colors.indigo,
+                      accentColor: theme.colorScheme.tertiary,
                     ),
                   ],
                 ),
@@ -475,8 +476,8 @@ class _VisitChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
       VisitStatus.planned => ('Planned', Colors.blueGrey),
-      VisitStatus.checkedIn => ('Checked in', const Color(0xFFE36414)),
-      VisitStatus.completed => ('Done', const Color(0xFF0F4C5C)),
+      VisitStatus.checkedIn => ('Checked in', kBrandOrange),
+      VisitStatus.completed => ('Done', kBrandTeal),
       VisitStatus.skipped => ('Skipped', Colors.brown),
     };
     return Container(

@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+/// ZatGo brand palette — single source of truth. Reference these instead of
+/// re-typing the hex values so the brand stays consistent everywhere and can
+/// be re-tuned in one place.
+const kBrandTeal = Color(0xFF0F4C5C);
+const kBrandTealLight = Color(0xFF2A9D8F);
+const kBrandOrange = Color(0xFFE36414);
+const kScaffoldDark = Color(0xFF0C1618);
+const kScaffoldLight = Color(0xFFF3F6F5);
+
 /// Field-sales palette: deep teal road / warm sand accents.
 /// Themes are cached — GoogleFonts must not rebuild on every [MaterialApp] build.
 ThemeData? _lightTheme;
@@ -26,16 +35,16 @@ Future<void> preloadVanSaleFonts() async {
 }
 
 ThemeData buildVanSaleTheme({Brightness brightness = Brightness.light}) {
-  const seed = Color(0xFF0F4C5C);
+  const seed = kBrandTeal;
   final isDark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(
     seedColor: seed,
     brightness: brightness,
-    primary: isDark ? const Color(0xFF2A9D8F) : seed,
-    secondary: const Color(0xFFE36414),
+    primary: isDark ? kBrandTealLight : seed,
+    secondary: kBrandOrange,
   );
 
-  final scaffold = isDark ? const Color(0xFF0C1618) : const Color(0xFFF3F6F5);
+  final scaffold = isDark ? kScaffoldDark : kScaffoldLight;
   final card = isDark ? const Color(0xFF152428) : Colors.white;
   final textTheme = GoogleFonts.plusJakartaSansTextTheme(
     isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,

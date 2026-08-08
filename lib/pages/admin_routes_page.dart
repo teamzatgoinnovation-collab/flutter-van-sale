@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/van_sale_admin_api.dart';
 import '../services/van_sale_context.dart';
+import '../theme.dart';
 import '../widgets/widgets.dart';
 import 'admin_shell.dart';
 
@@ -113,7 +114,7 @@ class _AdminRoutesPageState extends State<AdminRoutesPage> {
                                 title: 'Total Stops',
                                 value: '${_rows.length}',
                                 icon: Icons.map_outlined,
-                                accentColor: const Color(0xFF0F4C5C),
+                                accentColor: kBrandTeal,
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -122,7 +123,7 @@ class _AdminRoutesPageState extends State<AdminRoutesPage> {
                                 title: 'Visited',
                                 value: '${_rows.where((r) => '${r['status']}'.toLowerCase() == 'completed' || '${r['status']}'.toLowerCase() == 'checked in').length}',
                                 icon: Icons.check_circle_outline,
-                                accentColor: const Color(0xFF2A9D8F),
+                                accentColor: kBrandTealLight,
                               ),
                             ),
                           ],
@@ -131,8 +132,8 @@ class _AdminRoutesPageState extends State<AdminRoutesPage> {
                         ..._rows.map((r) {
                           final status = '${r['status'] ?? 'planned'}'.toLowerCase();
                           final (statusLabel, statusColor) = switch (status) {
-                            'checked in' => ('Checked in', const Color(0xFFE36414)),
-                            'completed' => ('Completed', const Color(0xFF0F4C5C)),
+                            'checked in' => ('Checked in', kBrandOrange),
+                            'completed' => ('Completed', kBrandTeal),
                             'skipped' => ('Skipped', Colors.brown),
                             _ => ('Planned', Colors.blueGrey),
                           };

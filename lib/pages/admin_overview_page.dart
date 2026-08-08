@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/van_sale_admin_api.dart';
 import '../services/van_sale_context.dart';
+import '../theme.dart';
 import '../widgets/widgets.dart';
 import 'admin_shell.dart';
 
@@ -122,7 +123,7 @@ class _AdminOverviewPageState extends State<AdminOverviewPage> {
                               value:
                                   '${s?['stops_done'] ?? 0}/${s?['stops_total'] ?? 0}',
                               icon: Icons.route_outlined,
-                              accentColor: const Color(0xFF0F4C5C),
+                              accentColor: kBrandTeal,
                             ),
                             KpiCard(
                               title: 'Sales total',
@@ -130,7 +131,7 @@ class _AdminOverviewPageState extends State<AdminOverviewPage> {
                                 (s?['sales_total'] as num?)?.toDouble() ?? 0,
                               ),
                               icon: Icons.point_of_sale_outlined,
-                              accentColor: const Color(0xFFE36414),
+                              accentColor: kBrandOrange,
                             ),
                             KpiCard(
                               title: 'Collections',
@@ -140,13 +141,13 @@ class _AdminOverviewPageState extends State<AdminOverviewPage> {
                                     0,
                               ),
                               icon: Icons.payments_outlined,
-                              accentColor: const Color(0xFF2A9D8F),
+                              accentColor: kBrandTealLight,
                             ),
                             KpiCard(
                               title: 'Total orders',
                               value: '${s?['orders_count'] ?? 0}',
                               icon: Icons.receipt_long_outlined,
-                              accentColor: Colors.indigo,
+                              accentColor: theme.colorScheme.tertiary,
                             ),
                           ],
                         ),
