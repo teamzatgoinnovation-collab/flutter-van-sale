@@ -4,13 +4,38 @@ import 'package:google_fonts/google_fonts.dart';
 /// ZatGo brand palette — single source of truth. Reference these instead of
 /// re-typing the hex values so the brand stays consistent everywhere and can
 /// be re-tuned in one place.
-const kBrandTeal = Color(0xFF0F4C5C);
-const kBrandTealLight = Color(0xFF2A9D8F);
-const kBrandOrange = Color(0xFFE36414);
-const kScaffoldDark = Color(0xFF0C1618);
-const kScaffoldLight = Color(0xFFF3F6F5);
+const kBrandBlue = Color(0xFF2952E3);
+const kBrandBlueLight = Color(0xFF5B7FFF);
+const kScaffoldDark = Color(0xFF10131C);
+const kScaffoldLight = Color(0xFFF5F6FA);
 
-/// Field-sales palette: deep teal road / warm sand accents.
+/// Semantic status colors — kept separate from the brand palette. These
+/// carry meaning (paid/overdue/etc.) regardless of what the brand color is.
+const kStatusSuccess = Color(0xFF16A34A);
+const kStatusWarning = Color(0xFFD97706);
+const kStatusError = Color(0xFFDC2626);
+
+/// Spacing scale — 4px base, per the design system.
+class AppSpacing {
+  const AppSpacing._();
+  static const xs = 4.0;
+  static const sm = 8.0;
+  static const md = 12.0;
+  static const lg = 16.0;
+  static const xl = 24.0;
+  static const xxl = 32.0;
+}
+
+/// Corner-radius scale — per the design system.
+class AppRadius {
+  const AppRadius._();
+  static const sm = 8.0;
+  static const md = 12.0;
+  static const lg = 16.0;
+  static const xl = 20.0;
+}
+
+/// Premium SaaS palette: deep royal blue on white/light-gray.
 /// Themes are cached — GoogleFonts must not rebuild on every [MaterialApp] build.
 ThemeData? _lightTheme;
 ThemeData? _darkTheme;
@@ -35,17 +60,17 @@ Future<void> preloadVanSaleFonts() async {
 }
 
 ThemeData buildVanSaleTheme({Brightness brightness = Brightness.light}) {
-  const seed = kBrandTeal;
+  const seed = kBrandBlue;
   final isDark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(
     seedColor: seed,
     brightness: brightness,
-    primary: isDark ? kBrandTealLight : seed,
-    secondary: kBrandOrange,
+    primary: isDark ? kBrandBlueLight : seed,
+    secondary: isDark ? kBrandBlue : kBrandBlueLight,
   );
 
   final scaffold = isDark ? kScaffoldDark : kScaffoldLight;
-  final card = isDark ? const Color(0xFF152428) : Colors.white;
+  final card = isDark ? const Color(0xFF1A1F2E) : Colors.white;
   final textTheme = GoogleFonts.poppinsTextTheme(
     isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
   );
@@ -68,12 +93,12 @@ ThemeData buildVanSaleTheme({Brightness brightness = Brightness.light}) {
       ),
     ),
     cardTheme: CardThemeData(
-      elevation: isDark ? 0 : 3,
-      shadowColor: scheme.primary.withValues(alpha: 0.16),
+      elevation: isDark ? 0 : 2,
+      shadowColor: scheme.shadow.withValues(alpha: 0.08),
       surfaceTintColor: Colors.transparent,
       color: card,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
         side: isDark
             ? BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.3))
             : BorderSide.none,

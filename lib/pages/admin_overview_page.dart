@@ -123,7 +123,7 @@ class _AdminOverviewPageState extends State<AdminOverviewPage> {
                               value:
                                   '${s?['stops_done'] ?? 0}/${s?['stops_total'] ?? 0}',
                               icon: Icons.route_outlined,
-                              accentColor: kBrandTeal,
+                              accentColor: kBrandBlue,
                             ),
                             KpiCard(
                               title: 'Sales total',
@@ -131,7 +131,7 @@ class _AdminOverviewPageState extends State<AdminOverviewPage> {
                                 (s?['sales_total'] as num?)?.toDouble() ?? 0,
                               ),
                               icon: Icons.point_of_sale_outlined,
-                              accentColor: kBrandOrange,
+                              accentColor: kBrandBlueLight,
                             ),
                             KpiCard(
                               title: 'Collections',
@@ -141,7 +141,7 @@ class _AdminOverviewPageState extends State<AdminOverviewPage> {
                                     0,
                               ),
                               icon: Icons.payments_outlined,
-                              accentColor: kBrandTealLight,
+                              accentColor: kBrandBlue,
                             ),
                             KpiCard(
                               title: 'Total orders',

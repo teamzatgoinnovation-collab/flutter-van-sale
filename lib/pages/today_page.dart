@@ -196,7 +196,7 @@ class _TodayPageState extends State<TodayPage> {
                       title: 'Stops done',
                       value: '${summary.stopsDone}/${summary.stopsTotal}',
                       icon: Icons.route_outlined,
-                      accentColor: kBrandTeal,
+                      accentColor: kBrandBlue,
                       subtitle: summary.stopsTotal > 0
                           ? '${((summary.stopsDone / summary.stopsTotal) * 100).toInt()}% completed'
                           : null,
@@ -205,13 +205,13 @@ class _TodayPageState extends State<TodayPage> {
                       title: 'Orders open',
                       value: '${summary.ordersQueued}',
                       icon: Icons.outbox_outlined,
-                      accentColor: kBrandOrange,
+                      accentColor: kBrandBlueLight,
                     ),
                     KpiCard(
                       title: 'Collections today',
                       value: money(summary.collectionsToday),
                       icon: Icons.payments_outlined,
-                      accentColor: kBrandTealLight,
+                      accentColor: kBrandBlue,
                     ),
                     KpiCard(
                       title: 'Van SKUs in stock',
@@ -476,8 +476,8 @@ class _VisitChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
       VisitStatus.planned => ('Planned', Colors.blueGrey),
-      VisitStatus.checkedIn => ('Checked in', kBrandOrange),
-      VisitStatus.completed => ('Done', kBrandTeal),
+      VisitStatus.checkedIn => ('Checked in', kBrandBlueLight),
+      VisitStatus.completed => ('Done', kBrandBlue),
       VisitStatus.skipped => ('Skipped', Colors.brown),
     };
     return Container(

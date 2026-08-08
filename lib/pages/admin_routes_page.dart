@@ -114,7 +114,7 @@ class _AdminRoutesPageState extends State<AdminRoutesPage> {
                                 title: 'Total Stops',
                                 value: '${_rows.length}',
                                 icon: Icons.map_outlined,
-                                accentColor: kBrandTeal,
+                                accentColor: kBrandBlue,
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -123,7 +123,7 @@ class _AdminRoutesPageState extends State<AdminRoutesPage> {
                                 title: 'Visited',
                                 value: '${_rows.where((r) => '${r['status']}'.toLowerCase() == 'completed' || '${r['status']}'.toLowerCase() == 'checked in').length}',
                                 icon: Icons.check_circle_outline,
-                                accentColor: kBrandTealLight,
+                                accentColor: kBrandBlueLight,
                               ),
                             ),
                           ],
@@ -132,8 +132,8 @@ class _AdminRoutesPageState extends State<AdminRoutesPage> {
                         ..._rows.map((r) {
                           final status = '${r['status'] ?? 'planned'}'.toLowerCase();
                           final (statusLabel, statusColor) = switch (status) {
-                            'checked in' => ('Checked in', kBrandOrange),
-                            'completed' => ('Completed', kBrandTeal),
+                            'checked in' => ('Checked in', kBrandBlueLight),
+                            'completed' => ('Completed', kBrandBlue),
                             'skipped' => ('Skipped', Colors.brown),
                             _ => ('Planned', Colors.blueGrey),
                           };
