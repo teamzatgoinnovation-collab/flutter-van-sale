@@ -21,13 +21,13 @@ ThemeData vanSaleLightTheme() =>
 ThemeData vanSaleDarkTheme() =>
     _darkTheme ??= buildVanSaleTheme(brightness: Brightness.dark);
 
-/// Warm the Plus Jakarta Sans cache before first paint (avoids main-thread jank).
+/// Warm the Poppins cache before first paint (avoids main-thread jank).
 Future<void> preloadVanSaleFonts() async {
   try {
     await GoogleFonts.pendingFonts([
-      GoogleFonts.plusJakartaSans(),
-      GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500),
-      GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+      GoogleFonts.poppins(),
+      GoogleFonts.poppins(fontWeight: FontWeight.w500),
+      GoogleFonts.poppins(fontWeight: FontWeight.w700),
     ]);
   } catch (_) {
     // Offline / fetch failure — ThemeData falls back to platform fonts.
@@ -46,7 +46,7 @@ ThemeData buildVanSaleTheme({Brightness brightness = Brightness.light}) {
 
   final scaffold = isDark ? kScaffoldDark : kScaffoldLight;
   final card = isDark ? const Color(0xFF152428) : Colors.white;
-  final textTheme = GoogleFonts.plusJakartaSansTextTheme(
+  final textTheme = GoogleFonts.poppinsTextTheme(
     isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
   );
 
