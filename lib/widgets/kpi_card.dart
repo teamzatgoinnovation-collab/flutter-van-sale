@@ -32,48 +32,48 @@ class KpiCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         child: Ink(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             color: scheme.surface,
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(
-                alpha: isDark ? 0.3 : 0.6,
-              ),
-            ),
+            border: isDark
+                ? Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.3),
+                  )
+                : null,
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
                 scheme.surface,
-                primaryAccent.withValues(alpha: isDark ? 0.08 : 0.03),
+                primaryAccent.withValues(alpha: isDark ? 0.08 : 0.04),
               ],
             ),
             boxShadow: [
               BoxShadow(
-                color: primaryAccent.withValues(alpha: isDark ? 0.08 : 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                color: primaryAccent.withValues(alpha: isDark ? 0.1 : 0.12),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: primaryAccent.withValues(
-                          alpha: isDark ? 0.2 : 0.12,
+                          alpha: isDark ? 0.22 : 0.14,
                         ),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      child: Icon(icon, color: primaryAccent, size: 18),
+                      child: Icon(icon, color: primaryAccent, size: 20),
                     ),
                     const Spacer(),
                     if (trend != null)
