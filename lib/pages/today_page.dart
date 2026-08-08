@@ -149,10 +149,28 @@ class _TodayPageState extends State<TodayPage> {
     await _load();
   }
 
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
   @override
   Widget build(BuildContext context) {
     final summary = _summary;
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final fullName = widget.sync.session.fullName ?? 'Driver';
+    final initial = fullName.trim().isNotEmpty
+        ? fullName.trim()[0].toUpperCase()
+        : 'V';
+    final now = DateTime.now();
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final dateLabel = '${months[now.month - 1]} ${now.day}, ${now.year}';
 
     return PageScaffold(
       title: 'VanSale',
@@ -176,21 +194,45 @@ class _TodayPageState extends State<TodayPage> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: [
-                Text(
-                  'Today on the route',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: scheme.primary,
+                      child: Text(
+                        initial,
+                        style: TextStyle(
+                          color: scheme.onPrimary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${_greeting()}, ${fullName.split(' ').first}',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            dateLabel,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Sell from the van, collect cash, and complete visits. '
-                  'Changes sync when you are online.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 18),
+                const SizedBox(height: AppSpacing.lg),
                 GridView.count(
                   crossAxisCount: 3,
                   shrinkWrap: true,
