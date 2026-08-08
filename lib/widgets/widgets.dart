@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 export 'kpi_card.dart';
+export 'quick_action_tile.dart';
 
 
 import '../models/models.dart';

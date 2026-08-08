@@ -153,6 +153,9 @@ class _VanSaleShellState extends State<VanSaleShell> {
         onSell: (customer, {tripId}) =>
             _openSell(customer: customer, tripId: tripId),
         onCollect: (customer) => _openCash(customer: customer),
+        onProducts: _openProducts,
+        onCustomers: _openCustomers,
+        onSyncCenter: _openSyncCenter,
         onOpenMenu: _openDrawer,
       ),
       OrdersPage(

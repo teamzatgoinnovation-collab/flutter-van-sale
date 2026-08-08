@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../widgets/aging_summary_card.dart';
 import '../widgets/widgets.dart';
 import 'aging_page.dart';
+import 'sales_return_page.dart';
 
 class TodayPage extends StatefulWidget {
   const TodayPage({
@@ -17,12 +18,18 @@ class TodayPage extends StatefulWidget {
     required this.sync,
     required this.onSell,
     required this.onCollect,
+    required this.onProducts,
+    required this.onCustomers,
+    required this.onSyncCenter,
     this.onOpenMenu,
   });
 
   final SyncService sync;
   final void Function(String customer, {String? tripId}) onSell;
   final void Function(String customer) onCollect;
+  final VoidCallback onProducts;
+  final VoidCallback onCustomers;
+  final VoidCallback onSyncCenter;
   final VoidCallback? onOpenMenu;
 
   @override
@@ -182,6 +189,52 @@ class _TodayPageState extends State<TodayPage> {
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
+                ),
+                const SizedBox(height: 18),
+                GridView.count(
+                  crossAxisCount: 3,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: AppSpacing.sm,
+                  crossAxisSpacing: AppSpacing.sm,
+                  childAspectRatio: 0.92,
+                  children: [
+                    QuickActionTile(
+                      label: 'New Sale',
+                      icon: Icons.point_of_sale_outlined,
+                      highlighted: true,
+                      onTap: () => widget.onSell(''),
+                    ),
+                    QuickActionTile(
+                      label: 'Products',
+                      icon: Icons.inventory_2_outlined,
+                      onTap: widget.onProducts,
+                    ),
+                    QuickActionTile(
+                      label: 'Customers',
+                      icon: Icons.people_outline,
+                      onTap: widget.onCustomers,
+                    ),
+                    QuickActionTile(
+                      label: 'Collection',
+                      icon: Icons.payments_outlined,
+                      onTap: () => widget.onCollect(''),
+                    ),
+                    QuickActionTile(
+                      label: 'Return Order',
+                      icon: Icons.assignment_return_outlined,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SalesReturnPage(),
+                        ),
+                      ),
+                    ),
+                    QuickActionTile(
+                      label: 'Sync Center',
+                      icon: Icons.cloud_sync_outlined,
+                      onTap: widget.onSyncCenter,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 14),
                 GridView.count(
