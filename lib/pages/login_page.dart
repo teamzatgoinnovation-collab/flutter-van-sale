@@ -121,25 +121,32 @@ class _LoginPageState extends State<LoginPage>
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 420),
                   child: ListView(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(AppSpacing.xl),
                     children: [
-                      const SizedBox(height: 24),
+                      const SizedBox(height: AppSpacing.xl),
                       Center(
                         child: Container(
-                          width: 64,
-                          height: 64,
+                          width: 72,
+                          height: 72,
                           decoration: BoxDecoration(
-                            color: scheme.primary.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(18),
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(AppRadius.lg),
+                            boxShadow: [
+                              BoxShadow(
+                                color: scheme.primary.withValues(alpha: 0.35),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
                           ),
                           child: Icon(
                             Icons.local_shipping_outlined,
-                            size: 32,
-                            color: scheme.primary,
+                            size: 34,
+                            color: scheme.onPrimary,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: AppSpacing.lg),
                       Text(
                         'ZatGo',
                         textAlign: TextAlign.center,
@@ -166,12 +173,12 @@ class _LoginPageState extends State<LoginPage>
                       ),
                       if (widget.accessMessage != null &&
                           widget.accessMessage!.isNotEmpty) ...[
-                        const SizedBox(height: 12),
+                        const SizedBox(height: AppSpacing.md),
                         Material(
                           color: scheme.errorContainer,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(AppRadius.md),
                           child: Padding(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(AppSpacing.md),
                             child: Text(
                               widget.accessMessage!,
                               textAlign: TextAlign.center,
@@ -182,21 +189,21 @@ class _LoginPageState extends State<LoginPage>
                           ),
                         ),
                       ],
-                      const SizedBox(height: 20),
-                      DecoratedBox(
+                      const SizedBox(height: AppSpacing.lg),
+                      Container(
                         decoration: BoxDecoration(
-                          color: scheme.surface.withValues(
-                            alpha: isDark ? 0.92 : 0.95,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: scheme.outlineVariant.withValues(
-                              alpha: 0.55,
+                          color: scheme.surface,
+                          borderRadius: BorderRadius.circular(AppRadius.xl),
+                          boxShadow: [
+                            BoxShadow(
+                              color: scheme.shadow.withValues(alpha: 0.08),
+                              blurRadius: 24,
+                              offset: const Offset(0, 8),
                             ),
-                          ),
+                          ],
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(20),
+                          padding: const EdgeInsets.all(AppSpacing.xl),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -209,7 +216,7 @@ class _LoginPageState extends State<LoginPage>
                                 keyboardType: TextInputType.emailAddress,
                                 autocorrect: false,
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: AppSpacing.md),
                               TextField(
                                 controller: _pwd,
                                 decoration: InputDecoration(
@@ -230,25 +237,33 @@ class _LoginPageState extends State<LoginPage>
                                 onSubmitted: (_) => _busy ? null : _login(),
                               ),
                               if (widget.session.lastError != null) ...[
-                                const SizedBox(height: 12),
+                                const SizedBox(height: AppSpacing.md),
                                 Text(
                                   widget.session.lastError!,
                                   style: TextStyle(color: scheme.error),
                                 ),
                               ],
-                              const SizedBox(height: 20),
-                              FilledButton(
-                                onPressed: _busy ? null : _login,
-                                child: _busy
-                                    ? SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: scheme.onPrimary,
+                              const SizedBox(height: AppSpacing.lg),
+                              SizedBox(
+                                height: 52,
+                                child: FilledButton(
+                                  onPressed: _busy ? null : _login,
+                                  child: _busy
+                                      ? SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: scheme.onPrimary,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Sign in',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                         ),
-                                      )
-                                    : const Text('Sign in'),
+                                ),
                               ),
                             ],
                           ),
