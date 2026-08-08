@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../data/van_sale_db.dart';
 import '../../models/models.dart';
 import '../../services/session.dart';
 import '../../services/sync_service.dart';
@@ -81,15 +82,22 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
       final latest = await customerRepository.get(created.id) ?? created;
       if (!mounted) return;
       final synced = latest.syncStatus == SyncStatus.uploaded;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            synced
-                ? 'Customer synced: ${latest.erpName ?? latest.customerName}'
-                : 'Customer saved offline (Pending Sync)',
-          ),
-        ),
-      );
+      String message;
+      if (synced) {
+        message = 'Customer synced: ${latest.erpName ?? latest.customerName}';
+      } else {
+        final syncError = await VanSaleDb.instance.lastQueueError(
+          'customer',
+          created.id,
+        );
+        message = syncError != null
+            ? 'Saved locally, but sync failed: $syncError'
+            : 'Customer saved offline (Pending Sync)';
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
       if (!mounted) return;
       Navigator.of(context).pop(latest);
     } catch (e) {

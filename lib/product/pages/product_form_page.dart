@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../data/van_sale_db.dart';
 import '../../models/models.dart';
 import '../../services/prefs.dart';
 import '../../services/session.dart';
@@ -91,15 +92,22 @@ class _ProductFormPageState extends State<ProductFormPage> {
       final latest = await productRepository.get(created.id) ?? created;
       if (!mounted) return;
       final synced = latest.syncStatus == SyncStatus.uploaded;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            synced
-                ? 'Product synced: ${latest.displayCode}'
-                : 'Product saved offline (Pending Sync)',
-          ),
-        ),
-      );
+      String message;
+      if (synced) {
+        message = 'Product synced: ${latest.displayCode}';
+      } else {
+        final syncError = await VanSaleDb.instance.lastQueueError(
+          'product',
+          created.id,
+        );
+        message = syncError != null
+            ? 'Saved locally, but sync failed: $syncError'
+            : 'Product saved offline (Pending Sync)';
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
       if (!mounted) return;
       Navigator.of(context).pop(latest);
     } catch (e) {

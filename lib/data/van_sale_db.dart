@@ -1652,6 +1652,21 @@ WHERE id = ?
   }
 
   /// Entity ids with in-flight / pending queue (excludes failed/conflict).
+  /// Most recent sync failure message for an entity, if any — used to show
+  /// the real backend rejection reason instead of a generic "offline" state.
+  Future<String?> lastQueueError(String entityType, String entityId) async {
+    final db = await database;
+    final rows = await db.query(
+      'sync_queue',
+      columns: ['last_error'],
+      where: 'entity_type = ? AND entity_id = ? AND last_error IS NOT NULL',
+      whereArgs: [entityType, entityId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['last_error'] as String?;
+  }
+
   Future<Set<String>> entityIdsWithActiveQueue(String entityType) async {
     final db = await database;
     final rows = await db.rawQuery(

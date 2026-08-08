@@ -4,6 +4,7 @@ import '../services/auth_scope.dart';
 import '../services/session.dart';
 import '../services/sync_service.dart';
 import '../services/van_sale_invoice_service.dart';
+import '../data/van_sale_db.dart';
 import '../data/van_sale_repo.dart';
 import '../models/models.dart';
 import '../widgets/widgets.dart';
@@ -167,6 +168,24 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
+  Future<void> _showSyncError(VanOrder order) async {
+    final error = await VanSaleDb.instance.lastQueueError('van_order', order.id);
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Sync failed'),
+        content: Text(error ?? 'No error details recorded for this sale.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _whenLabel(DateTime dt) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -290,7 +309,12 @@ class _OrdersPageState extends State<OrdersPage> {
                                           ),
                                     ),
                                     const SizedBox(height: 8),
-                                    SyncBadge(status: o.syncStatus),
+                                    GestureDetector(
+                                      onTap: o.syncStatus == SyncStatus.failed
+                                          ? () => _showSyncError(o)
+                                          : null,
+                                      child: SyncBadge(status: o.syncStatus),
+                                    ),
                                     if (canPrint)
                                       IconButton(
                                         tooltip: 'Tax invoice',
