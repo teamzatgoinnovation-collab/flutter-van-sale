@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/search/search_list_controller.dart';
 import '../../services/session.dart';
 import '../../services/sync_service.dart';
+import '../../theme.dart';
 import '../models/customer_model.dart';
 import '../repositories/customer_repository.dart';
 import 'customer_form_page.dart';
@@ -182,7 +183,12 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.lg,
+              AppSpacing.sm,
+            ),
             child: TextField(
               controller: _query,
               onChanged: _controller.onQueryChanged,
@@ -204,7 +210,7 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
             child: SegmentedButton<CustomerSearchScope>(
               segments: const [
                 ButtonSegment(
@@ -286,6 +292,12 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
                   : ListView.builder(
                       controller: _scroll,
                       physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg,
+                        AppSpacing.xs,
+                        AppSpacing.lg,
+                        AppSpacing.lg,
+                      ),
                       itemCount: c.items.length + (c.hasMore ? 1 : 0),
                       itemBuilder: (context, index) {
                         if (index >= c.items.length) {
@@ -302,56 +314,106 @@ class _CustomerSearchPageState extends State<CustomerSearchPage> {
                           );
                         }
                         final customer = c.items[index];
-                        return ListTile(
-                          leading: CircleAvatar(
-                            child: Text(
-                              customer.customerName.isEmpty
-                                  ? '?'
-                                  : customer.customerName
-                                        .substring(0, 1)
-                                        .toUpperCase(),
-                            ),
-                          ),
-                          title: Text(customer.displayName),
-                          subtitle: Text(
-                            [
-                              if ((customer.customerNameAr ?? '').isNotEmpty)
-                                customer.customerNameAr!,
-                              if (customer.subtitle.isNotEmpty)
-                                customer.subtitle,
-                              if ((customer.email ?? '').isNotEmpty)
-                                customer.email!,
-                              if ((customer.crNumber ?? '').isNotEmpty)
-                                'CR ${customer.crNumber}',
-                              if ((customer.barcode ?? '').isNotEmpty)
-                                'BC ${customer.barcode}',
-                            ].join('\n'),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          isThreeLine:
-                              (customer.customerNameAr ?? '').isNotEmpty,
-                          trailing: IconButton(
-                            tooltip: customer.isFavorite
-                                ? 'Unfavorite'
-                                : 'Favorite',
-                            onPressed: () => _toggleFavorite(customer),
-                            icon: Icon(
-                              customer.isFavorite
-                                  ? Icons.star_rounded
-                                  : Icons.star_outline_rounded,
-                              color: customer.isFavorite
-                                  ? theme.colorScheme.primary
-                                  : null,
-                            ),
-                          ),
+                        return _CustomerTile(
+                          customer: customer,
                           onTap: () => _select(customer),
+                          onToggleFavorite: () => _toggleFavorite(customer),
                         );
                       },
                     ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CustomerTile extends StatelessWidget {
+  const _CustomerTile({
+    required this.customer,
+    required this.onTap,
+    required this.onToggleFavorite,
+  });
+
+  final CustomerModel customer;
+  final VoidCallback onTap;
+  final VoidCallback onToggleFavorite;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final initial = customer.customerName.isEmpty
+        ? '?'
+        : customer.customerName.substring(0, 1).toUpperCase();
+    final lines = [
+      if ((customer.customerNameAr ?? '').isNotEmpty) customer.customerNameAr!,
+      if (customer.subtitle.isNotEmpty) customer.subtitle,
+      if ((customer.email ?? '').isNotEmpty) customer.email!,
+      if ((customer.crNumber ?? '').isNotEmpty) 'CR ${customer.crNumber}',
+      if ((customer.barcode ?? '').isNotEmpty) 'BC ${customer.barcode}',
+    ];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: scheme.primary.withValues(alpha: 0.12),
+                child: Text(
+                  initial,
+                  style: TextStyle(
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      customer.displayName,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (lines.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        lines.join(' · '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: customer.isFavorite ? 'Unfavorite' : 'Favorite',
+                onPressed: onToggleFavorite,
+                icon: Icon(
+                  customer.isFavorite
+                      ? Icons.star_rounded
+                      : Icons.star_outline_rounded,
+                  color: customer.isFavorite ? scheme.primary : null,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../services/session.dart';
 import '../../services/sync_service.dart';
 import '../../services/van_sale_policy.dart';
+import '../../theme.dart';
 import '../models/customer_model.dart';
 import '../repositories/customer_repository.dart';
 import '../validation/customer_validators.dart';
@@ -456,14 +457,18 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: const Icon(Icons.save_outlined),
-                  label: Text(
-                    widget.session.connected
-                        ? 'Save & sync'
-                        : 'Save offline (Pending Sync)',
+                const SizedBox(height: AppSpacing.xl),
+                SizedBox(
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: const Icon(Icons.save_outlined),
+                    label: Text(
+                      widget.session.connected
+                          ? 'Save & sync'
+                          : 'Save offline (Pending Sync)',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
               ],
@@ -480,9 +485,28 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
   }
 
   Widget _section(String title) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 16,
+            decoration: BoxDecoration(
+              color: scheme.primary,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
     );
   }
 
