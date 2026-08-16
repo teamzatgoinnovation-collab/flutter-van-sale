@@ -59,7 +59,7 @@ class VanSaleDb {
     final path = p.join(dir, 'van_sale.db');
     return openDatabase(
       path,
-      version: 6,
+      version: 8,
       onConfigure: (db) async {
         // Android sqflite rejects execute() for busy_timeout; rawQuery works.
         try {
@@ -82,6 +82,7 @@ class VanSaleDb {
         await _createProductIndexes(db);
         await _createProductSearchIndexes(db);
         await _createSyncLogsTable(db);
+        await _createReturnsTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -127,6 +128,14 @@ class VanSaleDb {
           await _createProductSearchTables(db);
           await _createProductIndexes(db);
           await _createProductSearchIndexes(db);
+        }
+        if (oldVersion < 7) {
+          await _createReturnsTable(db);
+        }
+        if (oldVersion < 8) {
+          try {
+            await db.execute('ALTER TABLE sync_queue ADD COLUMN next_retry_at TEXT');
+          } catch (_) {}
         }
       },
     );
@@ -190,6 +199,7 @@ CREATE TABLE sync_queue (
   status TEXT NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
+  next_retry_at TEXT,
   created_at TEXT NOT NULL,
   UNIQUE(entity_type, entity_id, op)
 )''');
@@ -202,6 +212,23 @@ CREATE TABLE meta (
       'CREATE INDEX IF NOT EXISTS idx_sync_queue_status_created '
       'ON sync_queue(status, created_at)',
     );
+  }
+
+  Future<void> _createReturnsTable(DatabaseExecutor db) async {
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS van_sale_returns (
+  id TEXT PRIMARY KEY NOT NULL,
+  client_id TEXT NOT NULL UNIQUE,
+  customer_name TEXT NOT NULL,
+  original_invoice TEXT NOT NULL,
+  reason TEXT,
+  items_json TEXT NOT NULL,
+  amount REAL NOT NULL,
+  sync_status TEXT NOT NULL,
+  erp_name TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)''');
   }
 
   Future<void> _createCustomersTable(DatabaseExecutor db) async {
@@ -624,6 +651,56 @@ CREATE TABLE IF NOT EXISTS sync_logs (
     final db = executor ?? await database;
     await db.update(
       'van_orders',
+      {
+        'sync_status': status.name,
+        'erp_name': ?erpName,
+        'amount': ?amount,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // --- returns ---
+
+  Future<List<VanSaleReturn>> listReturns() async {
+    final db = await database;
+    final rows = await db.query('van_sale_returns', orderBy: 'created_at DESC');
+    return rows.map(_returnFromRow).toList(growable: false);
+  }
+
+  Future<void> insertReturn(
+    VanSaleReturn ret, {
+    DatabaseExecutor? executor,
+  }) async {
+    final db = executor ?? await database;
+    final now = DateTime.now().toIso8601String();
+    await db.insert('van_sale_returns', {
+      'id': ret.id,
+      'client_id': ret.clientId,
+      'customer_name': ret.customerName,
+      'original_invoice': ret.originalInvoice,
+      'reason': ret.reason,
+      'items_json': jsonEncode([for (final l in ret.lines) l.toJson()]),
+      'amount': ret.amount,
+      'sync_status': ret.syncStatus.name,
+      'erp_name': ret.erpName,
+      'created_at': ret.createdAt.toIso8601String(),
+      'updated_at': now,
+    });
+  }
+
+  Future<void> setReturnSync({
+    required String id,
+    required SyncStatus status,
+    String? erpName,
+    double? amount,
+    DatabaseExecutor? executor,
+  }) async {
+    final db = executor ?? await database;
+    await db.update(
+      'van_sale_returns',
       {
         'sync_status': status.name,
         'erp_name': ?erpName,
@@ -1568,44 +1645,83 @@ LIMIT 1
       whereArgs: statuses,
       orderBy: 'created_at ASC',
     );
-    return rows.map(_queueFromRow).toList(growable: false);
+    final items = <SyncQueueItem>[];
+    for (final row in rows) {
+      final item = _tryQueueFromRow(row);
+      if (item == null) {
+        await _quarantineCorruptRow(row);
+        continue;
+      }
+      items.add(item);
+    }
+    return items;
   }
 
   Future<SyncQueueItem?> claimNext() async {
     final db = await database;
-    return db.transaction((txn) async {
-      // Customers first so sales/collections can resolve ERP names.
-      final rows = await txn.rawQuery('''
+    while (true) {
+      Map<String, Object?>? corruptRow;
+      final claimed = await db.transaction((txn) async {
+        // Customers first so sales/collections can resolve ERP names.
+        // Includes 'failed' so items become eligible for automatic retry
+        // again once their backoff window (next_retry_at) has elapsed —
+        // filtered below in Dart, since sync_queue timestamps are Dart
+        // ISO8601 strings, not SQLite datetime() format.
+        final rows = await txn.rawQuery('''
 SELECT * FROM sync_queue
-WHERE status IN ('pending', 'retry', 'queued')
+WHERE status IN ('pending', 'retry', 'queued', 'failed')
 ORDER BY CASE entity_type
   WHEN 'customer' THEN 0
   WHEN 'product' THEN 1
   ELSE 2 END, created_at ASC
-LIMIT 1
+LIMIT 50
 ''');
-      if (rows.isEmpty) return null;
-      final item = _queueFromRow(rows.first);
-      await txn.update(
-        'sync_queue',
-        {'status': 'uploading', 'attempts': item.attempts + 1},
-        where: 'id = ?',
-        whereArgs: [item.id],
-      );
-      return SyncQueueItem(
-        id: item.id,
-        clientId: item.clientId,
-        entityType: item.entityType,
-        entityId: item.entityId,
-        op: item.op,
-        method: item.method,
-        args: item.args,
-        status: 'uploading',
-        attempts: item.attempts + 1,
-        createdAt: item.createdAt,
-        lastError: item.lastError,
-      );
-    });
+        if (rows.isEmpty) return null;
+        final now = DateTime.now();
+        Map<String, Object?>? eligibleRow;
+        for (final row in rows) {
+          if ('${row['status']}' == 'failed') {
+            final nextRetryRaw = row['next_retry_at'] as String?;
+            final nextRetryAt = nextRetryRaw == null ? null : DateTime.tryParse(nextRetryRaw);
+            if (nextRetryAt != null && nextRetryAt.isAfter(now)) {
+              continue; // still backing off
+            }
+          }
+          eligibleRow = row;
+          break;
+        }
+        if (eligibleRow == null) return null;
+        final item = _tryQueueFromRow(eligibleRow);
+        if (item == null) {
+          corruptRow = eligibleRow;
+          return null;
+        }
+        await txn.update(
+          'sync_queue',
+          {'status': 'uploading', 'attempts': item.attempts + 1},
+          where: 'id = ?',
+          whereArgs: [item.id],
+        );
+        return SyncQueueItem(
+          id: item.id,
+          clientId: item.clientId,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          op: item.op,
+          method: item.method,
+          args: item.args,
+          status: 'uploading',
+          attempts: item.attempts + 1,
+          createdAt: item.createdAt,
+          lastError: item.lastError,
+        );
+      });
+      if (corruptRow != null) {
+        await _quarantineCorruptRow(corruptRow!);
+        continue;
+      }
+      return claimed;
+    }
   }
 
   Future<void> claimById(String id) async {
@@ -1720,12 +1836,35 @@ LIMIT 1
     );
   }
 
-  Future<void> markQueueFailed(String id, String error) async {
+  /// Staged exponential backoff for automatic retry of failed queue items:
+  /// 1m, 5m, 30m, then capped at 2h. Never gives up — the item stays queued
+  /// (status 'failed') and keeps retrying at the capped interval until it
+  /// succeeds or the user manually intervenes via Sync Center.
+  static const List<Duration> _backoffSchedule = [
+    Duration(minutes: 1),
+    Duration(minutes: 5),
+    Duration(minutes: 30),
+    Duration(hours: 2),
+  ];
+
+  static Duration _backoffDelayFor(int attempts) {
+    final index = attempts - 1;
+    if (index < 0) return _backoffSchedule.first;
+    if (index >= _backoffSchedule.length) return _backoffSchedule.last;
+    return _backoffSchedule[index];
+  }
+
+  Future<void> markQueueFailed(String id, String error, {int attempts = 1}) async {
     if (await _requeueIfDirty(id)) return;
     final db = await database;
+    final nextRetryAt = DateTime.now().add(_backoffDelayFor(attempts));
     await db.update(
       'sync_queue',
-      {'status': 'failed', 'last_error': error},
+      {
+        'status': 'failed',
+        'last_error': error,
+        'next_retry_at': nextRetryAt.toIso8601String(),
+      },
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -1839,7 +1978,16 @@ DELETE FROM sync_logs WHERE id NOT IN (
       whereArgs: statuses,
       orderBy: 'created_at ASC',
     );
-    return rows.map(_queueFromRow).toList(growable: false);
+    final items = <SyncQueueItem>[];
+    for (final row in rows) {
+      final item = _tryQueueFromRow(row);
+      if (item == null) {
+        await _quarantineCorruptRow(row);
+        continue;
+      }
+      items.add(item);
+    }
+    return items;
   }
 
   Future<Map<String, int>> syncCounts() async {
@@ -1944,6 +2092,30 @@ DELETE FROM sync_logs WHERE id NOT IN (
     );
   }
 
+  VanSaleReturn _returnFromRow(Map<String, Object?> r) {
+    final raw = jsonDecode('${r['items_json']}');
+    final lines = <OrderLine>[];
+    if (raw is List) {
+      for (final e in raw) {
+        if (e is Map) {
+          lines.add(OrderLine.fromJson(Map<String, dynamic>.from(e)));
+        }
+      }
+    }
+    return VanSaleReturn(
+      id: '${r['id']}',
+      clientId: '${r['client_id']}',
+      customerName: '${r['customer_name']}',
+      originalInvoice: '${r['original_invoice']}',
+      lines: lines,
+      amount: (r['amount'] as num).toDouble(),
+      createdAt: DateTime.tryParse('${r['created_at']}') ?? DateTime.now(),
+      syncStatus: _syncStatusFrom('${r['sync_status']}'),
+      reason: r['reason'] == null ? null : '${r['reason']}',
+      erpName: r['erp_name'] == null ? null : '${r['erp_name']}',
+    );
+  }
+
   Collection _collectionFromRow(Map<String, Object?> r) {
     return Collection(
       id: '${r['id']}',
@@ -1958,6 +2130,42 @@ DELETE FROM sync_logs WHERE id NOT IN (
   }
 
   SyncQueueItem queueItemFromRow(Map<String, Object?> r) => _queueFromRow(r);
+
+  /// Same as [_queueFromRow] but never throws — a malformed `args_json`
+  /// (e.g. from an interrupted write) returns null instead of taking down
+  /// the whole batch read. Callers must quarantine (mark failed) and skip
+  /// rows this returns null for, or every sync attempt after one corrupted
+  /// row aborts entirely with nothing else able to sync.
+  SyncQueueItem? _tryQueueFromRow(Map<String, Object?> r) {
+    try {
+      return _queueFromRow(r);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _quarantineCorruptRow(Map<String, Object?> r) async {
+    final id = '${r['id']}';
+    final db = await database;
+    // Corrupted args can never succeed on retry — never auto-retry this row
+    // (far-future next_retry_at), but keep it visible/failed for manual retry.
+    final neverAutoRetry = DateTime.now().add(const Duration(days: 3650));
+    await db.update(
+      'sync_queue',
+      {
+        'status': 'failed',
+        'last_error': 'Corrupted queue entry — payload unreadable',
+        'next_retry_at': neverAutoRetry.toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    await addSyncLog(
+      level: 'error',
+      message: 'Quarantined corrupted queue entry $id',
+      queueId: id,
+    );
+  }
 
   SyncQueueItem _queueFromRow(Map<String, Object?> r) {
     final decoded = jsonDecode('${r['args_json']}');

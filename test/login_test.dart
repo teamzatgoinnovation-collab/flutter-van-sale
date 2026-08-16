@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:van_sale/pages/login_page.dart';
@@ -9,6 +10,10 @@ void main() {
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
     await VanSalePrefs.instance.init();
+  });
+
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
   });
 
   group('VanSale Auto Test Login Tests', () {
@@ -40,8 +45,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('ZatGo'), findsOneWidget);
-      expect(find.text('VanSale'), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
       expect(find.byType(TextField), findsNWidgets(2));
       expect(find.text('Sign in'), findsOneWidget);
       expect(authedCalled, false);
@@ -89,6 +93,54 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(testMsg), findsOneWidget);
+    });
+
+    test('persisted session survives a fresh VanSaleSession instance (simulated app restart)', () async {
+      final original = VanSaleSession();
+      original.store.restoreSession(
+        baseUrl: 'https://vansale.zatgo.online',
+        sidCookie: 'sid=abc123',
+      );
+      original.user = 'driver@zatgo.online';
+      original.fullName = 'Test Driver';
+      await original.persistSession();
+
+      // A brand-new instance (as if the app process was killed and relaunched
+      // offline) must be able to restore straight to an authed state.
+      final restarted = VanSaleSession();
+      expect(restarted.connected, false);
+      final restored = await restarted.restoreSessionFromStorage();
+
+      expect(restored, true);
+      expect(restarted.connected, true);
+      expect(restarted.baseUrl, 'https://vansale.zatgo.online');
+      expect(restarted.user, 'driver@zatgo.online');
+      expect(restarted.fullName, 'Test Driver');
+      expect(restarted.restoredFromStorage, true);
+      expect(restarted.store.sidCookie, 'sid=abc123');
+    });
+
+    test('logout clears the persisted session so restart requires a fresh login', () async {
+      final session = VanSaleSession();
+      session.store.restoreSession(
+        baseUrl: 'https://vansale.zatgo.online',
+        sidCookie: 'sid=xyz789',
+      );
+      await session.persistSession();
+      await session.logout();
+
+      final restarted = VanSaleSession();
+      final restored = await restarted.restoreSessionFromStorage();
+      expect(restored, false);
+      expect(restarted.connected, false);
+    });
+
+    test('restoreSessionFromStorage returns false when nothing was persisted', () async {
+      final session = VanSaleSession();
+      final restored = await session.restoreSessionFromStorage();
+      expect(restored, false);
+      expect(session.connected, false);
+      expect(session.restoredFromStorage, false);
     });
   });
 }

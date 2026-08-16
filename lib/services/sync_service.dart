@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
 
 import '../customer/repositories/customer_repository.dart';
 import '../data/van_sale_db.dart';
@@ -33,7 +34,7 @@ class SyncService extends ChangeNotifier {
   final CustomerRepository customers;
   final ProductRepository products;
 
-  static const batchMethod = 'zatgo_core.api.v1.sync.batch.batch';
+  static const batchMethod = ZatGoApiMethods.syncBatchBatch;
   static const _backgroundInterval = Duration(seconds: 45);
 
   bool _running = false;
@@ -394,7 +395,7 @@ class SyncService extends ChangeNotifier {
           if (!softAck && (erpName == null || erpName.isEmpty)) {
             failed++;
             const err = 'Server ack missing name';
-            await db.markQueueFailed(id, err);
+            await db.markQueueFailed(id, err, attempts: item.attempts);
             await _markEntityStatus(item, SyncStatus.failed, error: err);
             await db.addSyncLog(
               level: 'error',
@@ -430,7 +431,7 @@ class SyncService extends ChangeNotifier {
         } else {
           failed++;
           final err = '${raw['error'] ?? 'Batch op failed'}';
-          await db.markQueueFailed(id, err);
+          await db.markQueueFailed(id, err, attempts: item.attempts);
           await _markEntityStatus(item, SyncStatus.failed, error: err);
           await db.addSyncLog(
             level: 'error',
@@ -446,7 +447,7 @@ class SyncService extends ChangeNotifier {
         if (seen.contains(item.id)) continue;
         failed++;
         const err = 'Batch result missing';
-        await db.markQueueFailed(item.id, err);
+        await db.markQueueFailed(item.id, err, attempts: item.attempts);
         await _markEntityStatus(item, SyncStatus.failed, error: err);
         await db.addSyncLog(
           level: 'error',
@@ -496,11 +497,8 @@ class SyncService extends ChangeNotifier {
       await _markEntityStatus(item, SyncStatus.uploading);
       final args = await _resolveArgs(item);
       final env = await session.store.callMethod(item.method, args: args);
-      final meta = env.meta;
-      final Map<String, dynamic>? metaMap = meta is Map
-          ? Map<String, dynamic>.from(meta as Map)
-          : null;
-      final conflict = metaMap != null && metaMap['conflict'] == true;
+      final metaMap = env.meta;
+      final conflict = metaMap['conflict'] == true;
       if (conflict) {
         await db.markQueueConflict(
           item.id,
@@ -544,7 +542,7 @@ class SyncService extends ChangeNotifier {
       );
       return _FlushOutcome.uploaded;
     } catch (e) {
-      await db.markQueueFailed(item.id, e.toString());
+      await db.markQueueFailed(item.id, e.toString(), attempts: item.attempts);
       await _markEntityStatus(item, SyncStatus.failed, error: e.toString());
       await db.addSyncLog(
         level: 'error',
@@ -559,7 +557,7 @@ class SyncService extends ChangeNotifier {
 
   Future<Map<String, dynamic>> _resolveArgs(SyncQueueItem item) async {
     if (item.entityType == 'customer' &&
-        item.method == CustomerApiMethods.sync) {
+        item.method == ZatGoApiMethods.accountingCustomersSync) {
       final localId = '${item.args['local_id'] ?? item.entityId}';
       final args = await customers.buildSyncArgs(localId);
       args['op'] = item.op;
@@ -569,7 +567,7 @@ class SyncService extends ChangeNotifier {
       return args;
     }
     if (item.entityType == 'product' &&
-        item.method == ProductApiMethods.sync) {
+        item.method == ZatGoApiMethods.warehouseItemsSync) {
       final localId = '${item.args['local_id'] ?? item.entityId}';
       final args = await products.buildSyncArgs(localId);
       args['op'] = item.op;
@@ -760,6 +758,18 @@ class SyncService extends ChangeNotifier {
           erpName: erpName,
           amount: amount,
         );
+      case 'van_sale_return':
+        double? returnAmount;
+        if (data is Map) {
+          returnAmount = (data['amount'] as num?)?.toDouble() ??
+              (data['grand_total'] as num?)?.toDouble();
+        }
+        await db.setReturnSync(
+          id: item.entityId,
+          status: SyncStatus.uploaded,
+          erpName: erpName,
+          amount: returnAmount,
+        );
       case 'collection':
         await db.setCollectionSync(
           id: item.entityId,
@@ -793,6 +803,8 @@ class SyncService extends ChangeNotifier {
     switch (item.entityType) {
       case 'van_order':
         await db.setOrderSync(id: item.entityId, status: status);
+      case 'van_sale_return':
+        await db.setReturnSync(id: item.entityId, status: status);
       case 'collection':
         await db.setCollectionSync(id: item.entityId, status: status);
       case 'customer':
