@@ -231,11 +231,26 @@ class VanSaleRepo {
     return order;
   }
 
+  /// Payment-method labels that match a real ERPNext "Mode of Payment"
+  /// record on this deployment — sending anything else (e.g. the old
+  /// "Card"/"Transfer" labels) fails server-side with
+  /// `LinkValidationError: Could not find Mode of Payment: ...`. "Other"
+  /// has no matching record, so it's intentionally omitted rather than sent.
+  static const kCollectionMethods = [
+    'Cash',
+    'Credit Card',
+    'Wire Transfer',
+    'Cheque',
+    'Other',
+  ];
+
   Future<Collection> recordCollection({
     required String customerName,
     required double amount,
     required String method,
     String? salesInvoice,
+    String? reference,
+    String? notes,
     VanSaleSession? session,
     String? customerErpName,
   }) async {
@@ -251,11 +266,17 @@ class VanSaleRepo {
       method: method,
       collectedAt: DateTime.now(),
       syncStatus: SyncStatus.pending,
+      salesInvoice: salesInvoice,
+      reference: reference,
+      notes: notes,
     );
 
     final erpCustomer = (customerErpName ?? '').trim();
     final customerForErp =
         erpCustomer.isNotEmpty ? erpCustomer : customerName.trim();
+    final erpMethod = method == 'Other' ? null : method;
+    final ref = (reference ?? '').trim();
+    final note = (notes ?? '').trim();
 
     final database = await db.database;
     await database.transaction((txn) async {
@@ -270,9 +291,11 @@ class VanSaleRepo {
           'client_id': clientId,
           'customer': customerForErp,
           'amount': amount,
-          'method': method,
+          'method': ?erpMethod,
           if (salesInvoice != null && salesInvoice.isNotEmpty)
             'sales_invoice': salesInvoice,
+          if (ref.isNotEmpty) 'reference': ref,
+          if (note.isNotEmpty) 'notes': note,
         },
         executor: txn,
       );

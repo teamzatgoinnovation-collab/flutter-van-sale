@@ -5,9 +5,11 @@ import '../customer/pages/customer_search_page.dart';
 import '../customer/repositories/customer_repository.dart';
 import '../data/van_sale_repo.dart';
 import '../models/models.dart';
+import '../services/aging_service.dart';
 import '../services/auth_scope.dart';
 import '../services/sync_service.dart';
 import '../services/van_sale_policy.dart';
+import '../theme.dart';
 import '../widgets/widgets.dart';
 
 class CollectionsPage extends StatefulWidget {
@@ -87,94 +89,286 @@ class _CollectionsPageState extends State<CollectionsPage> {
     }
 
     final amount = TextEditingController();
+    final referenceCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
     var method = 'Cash';
+    List<Map<String, dynamic>> invoices = const [];
+    String? selectedInvoice;
+    var invoicesLoading = false;
 
     try {
       if (!mounted) return;
-      final ok = await showDialog<bool>(
+
+      Future<void> loadOutstanding(
+        void Function(void Function()) setLocal,
+      ) async {
+        final sess = session ?? widget.sync.session;
+        final target = selected?.erpName ?? customer;
+        if (target.isEmpty || !sess.connected) return;
+        setLocal(() => invoicesLoading = true);
+        try {
+          final detail = await AgingService(sess).detail(customer: target);
+          setLocal(() {
+            invoices = detail;
+            invoicesLoading = false;
+          });
+        } catch (_) {
+          setLocal(() {
+            invoices = const [];
+            invoicesLoading = false;
+          });
+        }
+      }
+
+      var startedInitialLoad = false;
+      final ok = await showModalBottomSheet<bool>(
         context: context,
+        isScrollControlled: true,
         builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setLocal) => AlertDialog(
-            title: const Text('Record collection'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Customer',
-                    border: OutlineInputBorder(),
-                  ),
-                  child: Text(
-                    customer.isEmpty ? 'Search customers…' : customer,
-                    style: TextStyle(
-                      color: customer.isEmpty ? Theme.of(ctx).hintColor : null,
+          builder: (ctx, setLocal) {
+            if (!startedInitialLoad && customer.isNotEmpty) {
+              startedInitialLoad = true;
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => loadOutstanding(setLocal),
+              );
+            }
+            final scheme = Theme.of(ctx).colorScheme;
+            return Padding(
+              padding: EdgeInsets.only(
+                left: AppSpacing.lg,
+                right: AppSpacing.lg,
+                top: AppSpacing.lg,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.lg,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Record collection',
+                      style: Theme.of(
+                        ctx,
+                      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FilledButton.tonalIcon(
-                    onPressed: () async {
-                      final sess = session ?? widget.sync.session;
-                      final picked =
-                          await Navigator.of(
-                            context,
-                            rootNavigator: true,
-                          ).push<CustomerModel>(
-                            MaterialPageRoute(
-                              fullscreenDialog: true,
-                              builder: (_) => CustomerSearchPage(
-                                session: sess,
-                                sync: widget.sync,
-                                selectMode: true,
-                                initialQuery: customer,
+                    const SizedBox(height: AppSpacing.lg),
+                    InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Customer',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                      child: Text(
+                        customer.isEmpty ? 'Search customers…' : customer,
+                        style: TextStyle(
+                          color: customer.isEmpty ? Theme.of(ctx).hintColor : null,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.tonalIcon(
+                        onPressed: () async {
+                          final sess = session ?? widget.sync.session;
+                          final picked =
+                              await Navigator.of(
+                                context,
+                                rootNavigator: true,
+                              ).push<CustomerModel>(
+                                MaterialPageRoute(
+                                  fullscreenDialog: true,
+                                  builder: (_) => CustomerSearchPage(
+                                    session: sess,
+                                    sync: widget.sync,
+                                    selectMode: true,
+                                    initialQuery: customer,
+                                  ),
+                                ),
+                              );
+                          if (picked == null) return;
+                          setLocal(() {
+                            selected = picked;
+                            customer = picked.displayName;
+                            invoices = const [];
+                            selectedInvoice = null;
+                          });
+                          await loadOutstanding(setLocal);
+                        },
+                        icon: const Icon(Icons.search, size: 18),
+                        label: const Text('Search customer'),
+                      ),
+                    ),
+                    if (customer.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      Text(
+                        'Outstanding invoices',
+                        style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      if (invoicesLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: AppSpacing.md,
+                          ),
+                          child: Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        )
+                      else if (invoices.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: scheme.surfaceContainerHighest.withValues(
+                              alpha: 0.4,
+                            ),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                          ),
+                          child: Text(
+                            'No open invoices for this customer',
+                            style: Theme.of(ctx).textTheme.bodySmall,
+                          ),
+                        )
+                      else
+                        ...invoices.map((inv) {
+                          final name = '${inv['name'] ?? ''}';
+                          final due =
+                              '${inv['due_date'] ?? inv['posting_date'] ?? ''}';
+                          final outstandingAmt =
+                              (inv['outstanding'] as num?)?.toDouble() ??
+                              (inv['outstanding_amount'] as num?)
+                                  ?.toDouble() ??
+                              0;
+                          final isSelected = selectedInvoice == name;
+                          return Card(
+                            margin: const EdgeInsets.only(
+                              bottom: AppSpacing.xs,
+                            ),
+                            color: isSelected
+                                ? scheme.primaryContainer.withValues(
+                                    alpha: 0.35,
+                                  )
+                                : null,
+                            child: ListTile(
+                              dense: true,
+                              leading: Icon(
+                                isSelected
+                                    ? Icons.radio_button_checked
+                                    : Icons.radio_button_off,
+                                color: isSelected ? scheme.primary : null,
                               ),
+                              title: Text(name),
+                              subtitle: Text('Due $due'),
+                              trailing: Text(
+                                money(outstandingAmt),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              onTap: () => setLocal(() {
+                                selectedInvoice = isSelected ? null : name;
+                                if (!isSelected) {
+                                  amount.text = money(outstandingAmt);
+                                }
+                              }),
                             ),
                           );
-                      if (picked == null) return;
-                      setLocal(() {
-                        selected = picked;
-                        customer = picked.displayName;
-                      });
-                    },
-                    icon: const Icon(Icons.search, size: 18),
-                    label: const Text('Search customer'),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: amount,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(labelText: 'Amount'),
-                ),
-                const SizedBox(height: 10),
-                DropdownMenu<String>(
-                  initialSelection: method,
-                  label: const Text('Method'),
-                  expandedInsets: EdgeInsets.zero,
-                  dropdownMenuEntries: const [
-                    DropdownMenuEntry(value: 'Cash', label: 'Cash'),
-                    DropdownMenuEntry(value: 'Card', label: 'Card'),
-                    DropdownMenuEntry(value: 'Transfer', label: 'Transfer'),
+                        }),
+                      if (selectedInvoice != null)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: () =>
+                                setLocal(() => selectedInvoice = null),
+                            child: const Text('Collect without an invoice'),
+                          ),
+                        ),
+                    ],
+                    const SizedBox(height: AppSpacing.md),
+                    TextField(
+                      controller: amount,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      onChanged: (_) => setLocal(() {}),
+                      style: Theme.of(ctx).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Amount to collect',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'Payment method',
+                      style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      children: [
+                        for (final m in VanSaleRepo.kCollectionMethods)
+                          ChoiceChip(
+                            label: Text(m),
+                            selected: method == m,
+                            onSelected: (_) => setLocal(() => method = m),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    TextField(
+                      controller: referenceCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Reference / cheque no. (optional)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    TextField(
+                      controller: notesCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Notes (optional)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          flex: 2,
+                          child: SizedBox(
+                            height: 48,
+                            child: FilledButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: Text(
+                                'Collect${amount.text.trim().isEmpty ? '' : ' · ${money(double.tryParse(amount.text.trim()) ?? 0)}'}',
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
-                  onSelected: (v) => setLocal(() => method = v ?? 'Cash'),
                 ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
               ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Save'),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       );
 
@@ -198,22 +392,13 @@ class _CollectionsPageState extends State<CollectionsPage> {
         if (selected != null) {
           await customerRepository.markRecent(selected!.id);
         }
-        String? salesInvoice;
-        final orders = await vanSaleRepo.listOrders();
-        for (final o in orders) {
-          if (o.customerName == customer.trim() &&
-              o.erpName != null &&
-              o.erpName!.isNotEmpty &&
-              o.syncStatus == SyncStatus.uploaded) {
-            salesInvoice = o.erpName;
-            break;
-          }
-        }
         await vanSaleRepo.recordCollection(
           customerName: customer.trim(),
           amount: parsed,
           method: method,
-          salesInvoice: salesInvoice,
+          salesInvoice: selectedInvoice,
+          reference: referenceCtrl.text.trim(),
+          notes: notesCtrl.text.trim(),
           session: widget.sync.session,
           customerErpName: selected?.erpName,
         );
@@ -234,6 +419,8 @@ class _CollectionsPageState extends State<CollectionsPage> {
       }
     } finally {
       amount.dispose();
+      referenceCtrl.dispose();
+      notesCtrl.dispose();
     }
   }
 
@@ -242,7 +429,6 @@ class _CollectionsPageState extends State<CollectionsPage> {
     final todayTotal = _rows
         .where((c) => _isToday(c.collectedAt))
         .fold<double>(0, (s, c) => s + c.amount);
-    final theme = Theme.of(context);
 
     return PageScaffold(
       title: 'Cash',
@@ -260,63 +446,134 @@ class _CollectionsPageState extends State<CollectionsPage> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Card(
-              child: ListTile(
-                leading: Icon(
-                  Icons.account_balance_wallet_outlined,
-                  color: theme.colorScheme.primary,
-                ),
-                title: const Text('Collected today'),
-                trailing: Text(
-                  money(todayTotal),
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              AppSpacing.sm,
+            ),
+            child: KpiCard(
+              title: 'Collected today',
+              value: money(todayTotal),
+              icon: Icons.account_balance_wallet_outlined,
+              accentColor: kStatusSuccess,
             ),
           ),
           Expanded(
             child: _rows.isEmpty
-                ? const EmptyHint(
+                ? const AppEmptyState(
                     'No collections yet',
                     icon: Icons.payments_outlined,
                   )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      0,
+                      AppSpacing.lg,
+                      88,
+                    ),
                     itemCount: _rows.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, i) {
                       final c = _rows[i];
-                      return Card(
-                        clipBehavior: Clip.antiAlias,
-                        child: ListTile(
-                          title: Text(
-                            c.customerName,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          subtitle: Text('${c.method} · ${c.clientId}'),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                money(c.amount),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              SyncBadge(status: c.syncStatus),
-                            ],
-                          ),
-                        ),
-                      );
+                      return _CollectionTile(collection: c);
                     },
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CollectionTile extends StatelessWidget {
+  const _CollectionTile({required this.collection});
+
+  final Collection collection;
+
+  static const _methodIcons = {
+    'Cash': Icons.payments_outlined,
+    'Credit Card': Icons.credit_card_outlined,
+    'Wire Transfer': Icons.account_balance_outlined,
+    'Cheque': Icons.receipt_long_outlined,
+    'Other': Icons.more_horiz,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: kStatusSuccess.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: Icon(
+                _methodIcons[collection.method] ?? Icons.payments_outlined,
+                color: kStatusSuccess,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    collection.customerName,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    '${collection.method} · ${timeLabel(collection.collectedAt)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if ((collection.salesInvoice ?? '').isNotEmpty ||
+                      (collection.reference ?? '').isNotEmpty)
+                    Text(
+                      [
+                        if ((collection.salesInvoice ?? '').isNotEmpty)
+                          collection.salesInvoice!,
+                        if ((collection.reference ?? '').isNotEmpty)
+                          'Ref ${collection.reference}',
+                      ].join(' · '),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  money(collection.amount),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                SyncBadge(status: collection.syncStatus),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

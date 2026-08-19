@@ -129,6 +129,9 @@ class Collection {
     required this.collectedAt,
     required this.syncStatus,
     this.erpName,
+    this.salesInvoice,
+    this.reference,
+    this.notes,
   });
 
   final String id;
@@ -139,6 +142,9 @@ class Collection {
   final DateTime collectedAt;
   final SyncStatus syncStatus;
   final String? erpName;
+  final String? salesInvoice;
+  final String? reference;
+  final String? notes;
 }
 
 class StockLine {

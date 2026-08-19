@@ -59,7 +59,7 @@ class VanSaleDb {
     final path = p.join(dir, 'van_sale.db');
     return openDatabase(
       path,
-      version: 8,
+      version: 9,
       onConfigure: (db) async {
         // Android sqflite rejects execute() for busy_timeout; rawQuery works.
         try {
@@ -137,6 +137,13 @@ class VanSaleDb {
             await db.execute('ALTER TABLE sync_queue ADD COLUMN next_retry_at TEXT');
           } catch (_) {}
         }
+        if (oldVersion < 9) {
+          for (final col in ['sales_invoice', 'reference', 'notes']) {
+            try {
+              await db.execute('ALTER TABLE collections ADD COLUMN $col TEXT');
+            } catch (_) {}
+          }
+        }
       },
     );
   }
@@ -175,6 +182,9 @@ CREATE TABLE collections (
   method TEXT NOT NULL,
   sync_status TEXT NOT NULL,
   erp_name TEXT,
+  sales_invoice TEXT,
+  reference TEXT,
+  notes TEXT,
   collected_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 )''');
@@ -734,6 +744,9 @@ CREATE TABLE IF NOT EXISTS sync_logs (
       'method': c.method,
       'sync_status': c.syncStatus.name,
       'erp_name': c.erpName,
+      'sales_invoice': c.salesInvoice,
+      'reference': c.reference,
+      'notes': c.notes,
       'collected_at': c.collectedAt.toIso8601String(),
       'updated_at': now,
     });
@@ -2126,6 +2139,9 @@ DELETE FROM sync_logs WHERE id NOT IN (
       collectedAt: DateTime.tryParse('${r['collected_at']}') ?? DateTime.now(),
       syncStatus: _syncStatusFrom('${r['sync_status']}'),
       erpName: r['erp_name'] == null ? null : '${r['erp_name']}',
+      salesInvoice: r['sales_invoice'] == null ? null : '${r['sales_invoice']}',
+      reference: r['reference'] == null ? null : '${r['reference']}',
+      notes: r['notes'] == null ? null : '${r['notes']}',
     );
   }
 
