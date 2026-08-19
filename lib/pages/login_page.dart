@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zatgo_dart_sdk/zatgo_dart_sdk.dart';
 
-import '../services/hub_client.dart';
 import '../services/prefs.dart';
 import '../services/session.dart';
 import '../theme.dart';
@@ -58,17 +57,6 @@ class _LoginPageState extends State<LoginPage>
   Future<void> _login() async {
     setState(() => _busy = true);
     final email = _usr.text.trim();
-
-    final lookup = await lookupSiteForEmail(email);
-    if (!lookup.ok) {
-      if (!mounted) return;
-      setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(lookup.error ?? 'Account not recognized')),
-      );
-      return;
-    }
-    widget.session.applyResolvedBaseUrl(lookup.siteUrl!);
 
     final result = await widget.session.login(usr: email, pwd: _pwd.text);
     if (!mounted) return;

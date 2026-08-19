@@ -54,13 +54,6 @@ class VanSaleSession extends ChangeNotifier {
   bool get showAdminShell =>
       isAdmin && !(preferUserMode && isFieldUser);
 
-  /// Set by the hub lookup right before login — not a user-editable
-  /// setting, just how the resolved per-account site gets applied.
-  void applyResolvedBaseUrl(String value) {
-    baseUrl = value.replaceAll(RegExp(r'/$'), '');
-    notifyListeners();
-  }
-
   void restorePreferUserModeFromPrefs() {
     try {
       preferUserMode = VanSalePrefs.instance.preferUserMode;

@@ -6,18 +6,28 @@
 
 ## Auth
 
-Sign in with **site URL + email/password**.
+Sign in with **site URL + email/password**. The backend site is set via `FRAPPE_BASE_URL`
+(defaults to `https://vansale.zatgo.online` if not overridden — see `lib/services/session.dart`).
+
+To point at a different site (local bench, staging), copy `env.example.json` to `env.json`
+(gitignored) and edit the value, then run with:
 
 ```bash
---dart-define=FRAPPE_BASE_URL=https://erp.zatgo.online
+flutter run --dart-define-from-file=env.json
+```
+
+Or pass it inline for a one-off run without a file:
+
+```bash
+flutter run --dart-define=FRAPPE_BASE_URL=https://vansale1.localhost:8000
 ```
 
 ## Run
 
 ```bash
-cd Clients/flutter/van_sale
+cd flutter/flutter-van-sale
 flutter pub get
-flutter run
+flutter run --dart-define-from-file=env.json
 ```
 
 ## App map

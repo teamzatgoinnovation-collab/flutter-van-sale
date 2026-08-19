@@ -46,3 +46,6 @@ firebase_options.dart
 .env
 *.jks
 **/service-account*.json
+
+# Local dart-define-from-file config (see env.example.json for the template)
+env.json
