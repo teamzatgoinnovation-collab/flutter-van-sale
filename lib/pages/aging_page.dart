@@ -74,7 +74,7 @@ class _AgingPageState extends State<AgingPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null && _summary == null
-          ? EmptyHint(_error!, icon: Icons.error_outline)
+          ? AppEmptyState(_error!, icon: Icons.error_outline)
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: [
@@ -98,7 +98,7 @@ class _AgingPageState extends State<AgingPage> {
                 ),
                 const SizedBox(height: 8),
                 if (_invoices.isEmpty)
-                  const EmptyHint(
+                  const AppEmptyState(
                     'No open invoices in this view',
                     icon: Icons.receipt_long_outlined,
                   )
@@ -108,7 +108,9 @@ class _AgingPageState extends State<AgingPage> {
                     final party =
                         '${inv['customer_name'] ?? inv['customer'] ?? ''}';
                     final outstanding =
-                        (inv['outstanding_amount'] as num?)?.toDouble() ?? 0;
+                        (inv['outstanding'] as num?)?.toDouble() ??
+                        (inv['outstanding_amount'] as num?)?.toDouble() ??
+                        0;
                     final due =
                         '${inv['due_date'] ?? inv['posting_date'] ?? ''}';
                     return Card(
