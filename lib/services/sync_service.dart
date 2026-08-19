@@ -337,7 +337,7 @@ class SyncService extends ChangeNotifier {
     }
 
     try {
-      final env = await session.store.callMethod(
+      final env = await session.store.callMethodGet(
         batchMethod,
         args: {'operations': jsonEncode(ops)},
       );
@@ -496,7 +496,7 @@ class SyncService extends ChangeNotifier {
       await db.claimById(item.id);
       await _markEntityStatus(item, SyncStatus.uploading);
       final args = await _resolveArgs(item);
-      final env = await session.store.callMethod(item.method, args: args);
+      final env = await session.store.callMethodGet(item.method, args: args);
       final metaMap = env.meta;
       final conflict = metaMap['conflict'] == true;
       if (conflict) {
